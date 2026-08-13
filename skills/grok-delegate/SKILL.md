@@ -113,6 +113,28 @@ grok -s "$SID" --prompt-file spec.md ...     # first call
 grok -r "$SID" -p "apply review notes: ..." ... # follow-up
 ```
 
+A session id is **pinned once** (`-s`) and only **resumed** afterwards
+(`-r`). Re-invoking `-s` with a used id fails with "Session ID already in
+use" — for a new round (e.g. a FIX round whose spec is self-contained
+anyway), mint a fresh id instead; nothing is lost.
+
+### Parallel tracks (worktree isolation)
+
+When two delegations touch modules that import each other, a shared tree
+produces phantom gate failures (track A's gate reads track B's half-edited
+file). Isolate each track:
+
+```bash
+git -C <repo> worktree add ../<repo>-wt-<track> -b wt/<track> HEAD
+ln -sfn <repo>/node_modules ../<repo>-wt-<track>/node_modules  # deps without reinstall
+# launch grok with --cwd <absolute worktree path>; lead merges diffs
+# sequentially after review, then removes the worktree.
+```
+
+Give each track an explicit writable-file list (code + its own gate file),
+keep the gate files disjoint, and state in each spec that other tracks'
+breakage is report-only. The lead applies diffs one track at a time.
+
 ### Structured results
 
 When you need to parse a verdict, add `--json-schema '<JSON Schema>'` —
@@ -262,6 +284,16 @@ patterns or large volumes.
   task. A reference of a different effect type transplants the wrong visual
   language — if you attach references, say "borrow the color/edge
   discipline, not the shapes".
+- **Absolute paths everywhere**: `--prompt-file` resolves against `--cwd`,
+  and shell cwd resets between the lead's own tool calls — relative paths
+  have produced "the edit didn't land" misdiagnoses (it read the wrong
+  copy). Put absolute paths in the spec's file lists and verification
+  commands too.
+- **macOS has no `timeout(1)`.** Don't wrap grok in `timeout`; run it in the
+  background through your harness and watch the log/tree instead.
+- Before diagnosing a hung delegation or lock contention, `pgrep -fl grok` —
+  idle sessions left over from earlier rounds are common and easy to
+  mistake for your run.
 
 ## Local overlay (project/user-specific context)
 

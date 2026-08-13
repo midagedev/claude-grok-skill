@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-grok-skill",
+  "description": "Delegate implementation and vision-verdict work to the local grok CLI as a cheap headless sub-agent, while the lead Claude session stays orchestration-only.",
+  "owner": {
+    "name": "midagedev",
+    "url": "https://github.com/midagedev"
+  },
+  "plugins": [
+    {
+      "name": "grok-delegate",
+      "description": "Field-tested recipes for driving the grok CLI as an implementation sub-agent: invocation flags, quality bundle, git policy profiles, lead review checklist.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

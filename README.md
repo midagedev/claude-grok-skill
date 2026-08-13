@@ -1,76 +1,119 @@
-# claude-grok-skill
+# grok-delegate
 
-**Claude Code에서 grok CLI를 구현 서브에이전트로 부리는 스킬** — 리드 세션(Claude)은 오케스트레이션·스펙 작성·diff 리뷰·커밋만 하고, 코드 구현·기계적 수정·스크린샷 판정은 로컬 `grok` CLI에 위임해 토큰을 아낍니다.
+**Your Claude session does the thinking. Your grok subscription does the typing.**
 
-A Claude Code skill that delegates implementation and vision-verdict work to the local **grok CLI** as a cheap headless sub-agent, while the lead Claude session stays orchestration-only.
+[English](./README.md) | [한국어](./README.ko.md)
 
-## Why
+A Claude Code skill that turns the local **grok CLI** into a headless implementation sub-agent. The lead Claude session keeps the work where judgment matters — specs, diff review, gates, commits — and delegates code implementation, mechanical edits, and even screenshot verdicts to grok, where implementation tokens are effectively free on a grok subscription.
 
-- grok 구독이 있으면 구현 토큰이 사실상 무료입니다. 판단이 필요한 지점(스펙·리뷰·게이트·커밋)에만 Claude 토큰을 씁니다.
-- 스킬에 담긴 운영 규칙은 전부 실측입니다: 동일 스펙을 Claude(Opus/Fable)와 grok에게 병렬로 주고 블라인드 판정(비전 + 코드 리뷰)으로 비교하는 실험을 9회 돌려, **품질 격차를 프롬프트 장치로 좁히는 방법**을 찾았습니다.
-  - 자기 저작 게이트 깊이: 계약↔단언 매핑 표를 의무화하자 단언 수가 4배로 (10 → 42 → 67).
-  - 시각 품질: "자기 캡처를 직접 열어 계약과 대조 + **정체성 가독**('X로 읽히는가, 무엇으로 오독되는가')을 체크리스트 1번으로" — 도입 후 grok이 블라인드 비전 비교에서 상위 모델을 이기기 시작.
-  - 로직 설계: derive-don't-store 등 설계 원칙 4항을 지시하면 상태 기계 품질이 리뷰어가 인정할 수준으로 상승 (완전히 닫히지는 않음 — 한계도 README 하단에).
+Everything in this skill is field-tested. We ran a 9-experiment series giving the *same spec* to grok and to stronger implementer models (Claude Opus / Fable) in parallel worktrees, then judged the outputs **blind** (unlabeled, labels swapped every round). The skill is the distillation of what actually closed the quality gap.
+
+## The evidence: how prompt devices closed the gap
+
+The single most useful finding: **most of the gap was never model capability — it was missing defaults**, and defaults can be written into the spec.
+
+| Exp | Task | Device added to grok's spec | Blind verdict | Measured effect |
+|---|---|---|---|---|
+| E1 | VFX module (energy barrier) | — (baseline) | lost 0:5 | self-authored test assertions: **14** vs 24 |
+| E2 | VFX (destruction burst) | — (replication) | lost | assertions **12** vs 32; grok 1.5× faster |
+| E3 | VFX (cloud parallax) | fairness fixes + *self visual verification* | lost — output didn't read as its subject | root cause traced to the checklist, not the model (below) |
+| E5 | exposure flash + hitstop | + `--rules` preamble injection, **contract↔assertion mapping table** (bundle v1) | **won 2:0:1** (grok-vs-grok A/B) | assertions **10 → 42** with the mapping table alone |
+| E6 | graze sparks | reference-image injection | **rejected 4:0:1** | references only help for the *same effect type* — otherwise they transplant the wrong visual language |
+| E7 | bullet-time system | + quantified depth, self-review pass, max-turns 1200 (bundle v2) | **split: visual axis won** (first visual win of the series), logic axis lost | assertions **67** vs 95 — gap down from 3×+ to 1.4×; wall-clock 2.2× faster |
+| E8 | FOV cue system (vs a stronger model) | bundle v2 | split: visual won, code lost | opponent found a defect in *our own spec*; adopted a merge of both |
+| E9 | timing-judge state machine | + 4 logic design principles (bundle v3) | lost, but reviewer explicitly credited grok's single-time-axis design | assertions **81**, fastest run of the series (1,112 s) |
+
+Assertion-depth trajectory across the series: **14 → 12 → 10 → 42 → 67 → 81**. That is prompt devices, not fine-tuning.
+
+The E3 lesson deserves its own line. grok self-reported SHIP on all six checklist axes, then lost the blind verdict because the render *didn't read as a cloud*. Every axis it checked was valid — the failure lived outside the checklist. Since making **identity legibility** ("does this read as X? what could it be misread as?") mandatory item #1, grok's self-verdicts started matching the independent blind verdicts — and it went on to win the visual axis twice (E7, E8).
+
+Where the series settled (our production assignment table):
+
+| Task type | Assignment |
+|---|---|
+| Mechanical edits, FIX rounds, porting, tuning, merge rounds | **grok** — undefeated across the series |
+| New visual systems | **grok first draft** (bundle v2) + a blind vision gate; rewrite by Claude after 2 failed FIX rounds |
+| Logic cores (state machines, serialization) | stronger model first, or grok draft + Claude review — design-weight tasks stayed a Claude-family win (3 for 3) |
+| Verdicts (vision, code review) | **grok** — no self-bias observed; it rejected its own implementations multiple times |
+
+## How it works
+
+| Role | Owner |
+|---|---|
+| Orchestration, spec writing, diff review, gates, commits | Lead Claude session |
+| Code implementation, mechanical edits, numeric harnesses | `grok` CLI (headless) |
+| Screenshot / visual verdicts | `grok` CLI (escalate to Claude only if a verdict contradicts instrumentation) |
+
+The core principle: **grok is an executor of tight specs.** It has zero conversation context, so every delegation is a self-contained spec file — file paths, numeric contracts, completion criteria, verification commands — assembled from a shared preamble plus a per-task section, and launched headless in the background.
 
 ## Install
+
+### Claude Code plugin marketplace
+
+```
+/plugin marketplace add midagedev/claude-grok-skill
+/plugin install grok-delegate@claude-grok-skill
+```
+
+### Or the install script
 
 ```bash
 git clone https://github.com/midagedev/claude-grok-skill
 cd claude-grok-skill
-
-# user scope (~/.claude/skills/grok-delegate/)
-./install.sh
-
-# or project scope (./.claude/skills/grok-delegate/ in your repo)
-./install.sh --project
+./install.sh            # user scope: ~/.claude/skills/grok-delegate/
+./install.sh --project  # project scope: ./.claude/skills/grok-delegate/
 ```
 
-전제 조건 / Prerequisites:
+Prefer the script if you plan to use a [local overlay](#local-overlay) — the script preserves it across upgrades.
+
+### Prerequisites
+
 - [Claude Code](https://claude.com/claude-code)
 - `grok` CLI installed and authenticated (a grok subscription)
 
-설치 후 Claude Code 세션에서 `/grok-delegate`를 입력하거나, "이거 grok으로 돌려줘"라고 말하면 스킬이 로드됩니다.
+Then say "run this via grok" in any Claude Code session, or invoke `/grok-delegate`.
 
 ## What's inside
 
 | File | Purpose |
 |---|---|
-| `skills/grok-delegate/SKILL.md` | 스킬 본문 — 호출 레시피(검증된 플래그 조합), 품질 번들, 리드 검수 체크리스트 |
-| `skills/grok-delegate/references/spec-preamble.md` | 모든 위임 스펙 앞에 붙이는 공통 규칙 — 전부 실제 사고에서 나온 8개 조항 + 자기검증 8문항 보고 형식 |
-| `skills/grok-delegate/references/spec-template.md` | 작업별 스펙 템플릿 — 계약·깊이 요구·시각 자기검증 프로토콜 골격 |
+| `skills/grok-delegate/SKILL.md` | The skill: invocation recipe (verified flag combos), git policy profiles, quality bundle, parallel-track isolation, lead review checklist |
+| `skills/grok-delegate/references/spec-preamble.md` | Shared rules prepended to every delegated spec — every clause comes from a real incident |
+| `skills/grok-delegate/references/spec-template.md` | Per-task spec skeleton: contracts, depth requirements, visual self-verification protocol |
 
-## The quality bundle (요약)
+## The quality bundle (summary)
 
-grok에게 위임할 때 스펙에 넣는 다섯 장치 — 각각이 실험에서 측정 가능한 품질 상승을 만들었습니다:
+Five devices, each with a measured effect in the table above:
 
-1. **계약↔단언 매핑 표** + FAIL-first 증거 (게이트 깊이 4배)
-2. **깊이의 정량화** — "꼼꼼히" 대신 "조항당 단언 2개, 커버리지 표, 발견한 결함은 네 범위 안에서 방어까지"
-3. **셀프 리뷰 패스** — "놓쳤을 결함 클래스 3개를 나열하고 각각 단언화"
-4. **시각 자기검증** — 자기 캡처를 열어 계약과 대조, 1번 항목은 항상 정체성 가독
-5. **로직 설계 원칙 4항** — derive-don't-store · 로드 시 재정규화 · 입력 3분류 방어 · 적대적 API 셀프 리뷰
+1. **Contract↔assertion mapping table** + FAIL-first evidence — quadrupled self-authored gate depth on its own
+2. **Quantified depth** — never "be thorough"; instead "≥2 assertions per contract clause, coverage table, defend discovered defects within your own scope"
+3. **Self-review pass** — "list 3 defect classes you may have missed; assert or justify"
+4. **Visual self-verification** — grok opens its own captures; checklist item #1 is always identity legibility
+5. **Logic design principles** — derive-don't-store · re-normalize on load · 3-class input defense · adversarial API self-review
 
-플래그는 `--reasoning-effort xhigh --max-turns 1200 --always-approve` + **git 정책 프로파일**이 실측 기준입니다 (근거는 SKILL.md 참조).
+Standard flags: `--reasoning-effort xhigh --max-turns 1200 --always-approve` + a git policy profile.
 
 ## Git policy profiles
 
-`--deny 'Bash(git *)'` 전면 차단은 grok이 커밋 이력·blame·PR 조회조차 못 하게 만듭니다. 세 프로파일 중 위임마다 선택하세요:
+A blanket `--deny 'Bash(git *)'` blocks *reads* too — grok can't inspect history, blame, or PRs. Pick per delegation:
 
-1. **strict (기본 권장)** — 상태 변경 서브커맨드만 열거 차단, 읽기(`git log/show/diff/blame`, `gh pr list/view`)는 허용. 실측: 읽기 통과, `git commit` 차단, HEAD 불변.
-2. **readonly-plus** — 종전의 전면 차단. 파일 경계가 민감한 병렬 트랙용.
-3. **trusted** — deny 없음. **격리 워크트리 한정**으로, grok이 라운드 경계마다 WIP 커밋을 하길 원할 때. push/merge는 여전히 리드 몫.
+1. **strict (default)** — enumerated denies on state-changing subcommands only; `git log/show/diff/blame`, `gh pr list/view` still work. Field-tested: reads pass, `git commit` blocked, HEAD unchanged.
+2. **readonly-plus** — the blanket ban, for parallel tracks with tight file boundaries.
+3. **trusted** — no denies, **isolated worktree only**, when you want grok making WIP commits at round boundaries. Push/merge stays with the lead.
 
-glob deny는 안전망이지 증명이 아닙니다(`git -C <path> commit` 류 우회 가능) — 프리앰블의 git 규칙을 2차 방어선으로 유지하세요.
+Glob denies are a safety net, not a proof (`git -C <path> commit` can slip past) — the preamble's git rules stay in the spec as the second layer.
 
 ## Local overlay
 
-공유 스킬 본문에 넣을 수 없는 **프로젝트/개인 전용 컨텍스트**(역할표·함정 문서 목록·경로 규약·모델 배정표)는 `references/local-overlay.md`로 두세요. 스킬이 자동으로 함께 적용하고, `install.sh`가 업그레이드 시 보존합니다. 이 레포는 오버레이를 배포하지 않습니다.
+Project- or user-specific context that doesn't belong in the shared skill (role tables, house gate recipes, model assignment tables, trap-doc lists) goes in `references/local-overlay.md` next to the installed skill. The skill applies it automatically; `install.sh` preserves it across upgrades. This repo never ships one — and if you install via the plugin marketplace, keep your overlay elsewhere and re-copy after updates, since managed plugin dirs can be replaced wholesale.
 
-## Known limits (정직하게)
+## Known limits (honestly)
 
-- 탐색적 문제(스펙을 쓸 수 없는 원인 축소)는 위임 대상이 아닙니다 — 리드가 먼저 좁히세요.
-- 상태 기계의 미묘한 설계(라이브/재유도 이중 구현 회피, "수선 vs 거절" 경계)는 원칙 지시로도 완전히 닫히지 않았습니다. 설계 무게가 있는 코어는 Claude가 짜고 grok이 리뷰받는 편이 안전합니다.
-- 참조 이미지는 과제와 **같은 이펙트 유형**일 때만 도움이 됩니다. 다른 유형의 "모범 캡처"를 주면 형태 언어가 오염되어 오히려 나빠졌습니다.
-- grok 보고서는 대체로 정직하지만, 문제는 **보고에 없는 것**입니다 — SKILL.md의 리드 검수 체크리스트 8항을 따르세요.
+- Exploratory problems that can't be specced (multi-turn cause narrowing) are not delegation material — the lead narrows first.
+- Subtle state-machine design didn't fully close even with bundle v3: principles moved the loss to a deeper layer (live-vs-restored dual paths, repair-vs-reject boundaries). Design-weight cores are safer written by Claude and reviewed by grok.
+- Reference images only help when they show the same effect type as the task (E6 was rejected 4:0:1 for exactly this).
+- grok's reports are largely honest; the risk is what the report *doesn't* say — follow the 8-point lead review checklist in SKILL.md.
+- This repo ships Claude Code support only. The SKILL.md format is portable to other agents, but we only publish what we've verified end-to-end.
 
 ## License
 
