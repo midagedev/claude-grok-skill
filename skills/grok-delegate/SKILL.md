@@ -278,6 +278,65 @@ say. Verified leak points, in order:
 Fix small precision defects yourself on the spot; re-delegate only repeated
 patterns or large volumes.
 
+## Image generation (built-in `image_gen` / `image_edit`)
+
+Headless grok CLI sessions have image generation built in — the `image_gen`
+and `image_edit` tools work under `grok -p/--prompt-file` with
+`--always-approve` (field-verified 2026-08-13, grok-4.6). **Video generation
+is also present**: `image_to_video` and `reference_to_video` report available
+in the same headless sessions (availability field-verified 2026-08-13;
+generation itself not yet exercised — 6s/10s shots per the bundled `imagine`
+skill, frame-harvest pipeline per `game-animation-frames`). Guidance for the
+tools themselves ships with grok at `~/.grok/bundled/skills/imagine/SKILL.md`
+(prompt-craft, reference-first rules, consistency via `image_edit`
+anchoring); related bundled skills cover game assets
+(`game-tilesets`, `game-asset-core`, `game-animation-frames`, ...).
+
+Field-tested facts the spec must account for:
+
+- **Output lands outside the worktree**: the tool writes to
+  `~/.grok/sessions/<url-encoded-cwd>/<session-uuid>/images/N.jpg`. Always
+  instruct grok to **copy the result into the worktree** at an explicit path
+  and `ls -la` it in the report.
+- **Output is JPEG** even when you ask for PNG — no alpha channel. If the
+  asset needs transparency (sprites, atlases), the spec must include a
+  matting step (generate on a distinct flat key color, then key it out in
+  post) or accept opaque cards.
+- Observed resolution tier: 1024×1024 at `aspect_ratio 1:1`. `aspect_ratio`
+  works (`16:9`, `9:16`, ...); there is **no `n`/count parameter** — issue
+  multiple calls for variations.
+- For a recurring look across assets, generate one canonical reference and
+  derive the rest with `image_edit` (independent `image_gen` calls drift).
+- Moderation blocks are terminal: the spec should say "report the block,
+  do not paraphrase-retry".
+- Treat generated assets like any other artifact: numeric contract
+  (palette bands, coverage) + the lead's independent vision verdict before
+  commit. Generation quality is high enough to beat procedural texturing
+  for painterly/organic assets (clouds, terrain washes), so prefer
+  generate→post-process→gate over shader-only approaches there.
+
+## Bundled grok skills — index
+
+grok ships built-in skills at `~/.grok/bundled/skills/<name>/SKILL.md`.
+grok auto-loads them when the task matches; **naming the skill in the spec**
+("load the imagine skill", "follow game-tilesets") force-loads it. This is
+the notable subset — read the SKILL.md at that path for details:
+
+| Skill | What it gives a delegated task |
+|---|---|
+| `imagine` | `image_gen`/`image_edit` prompt-craft, reference-first rules, consistency anchoring (see section above) |
+| `game-asset-core` | Core rules + engine-ready defaults for generated game assets — base skill for the `game-*` family |
+| `game-tilesets` | Seamless/transition tilesets **that actually tile** — use for ground/terrain textures |
+| `game-animation-frames` | Video-first animation frame sets that actually cycle |
+| `game-character-consistency` | Same character across every generated image |
+| `game-ui-icons` | Game UI kits and icon sets |
+| `design` / `implement` / `review` / `execute-plan` | grok-internal multi-agent loops (writer↔reviewer consensus, implement-review-fix, PR-plan DAG execution). NOTE: these spawn grok subagents — drop `--no-subagents` if a spec asks for them; normally we keep our own lead-owned loop instead |
+| `code-review` | Strict maintainability audit (abstraction quality, giant files, condition growth) |
+| `pr-babysit` | Monitor PRs: fix CI, address review comments, resolve conflicts, restack |
+| `pdf` / `docx` / `pptx` | Read/create/transform documents and slide decks |
+| `resume-claude` / `resume-codex` / `resume-cursor` | Continue from another agent's recent session — lets grok pick up a Claude Code session's context |
+| `create-skill` / `create-workflow` / `skill-design-principles` | Author new grok skills/workflows |
+
 ## When NOT to delegate to grok
 
 - Problems too exploratory to spec (lead narrows the cause first, then delegates)
