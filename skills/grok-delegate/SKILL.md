@@ -43,9 +43,43 @@ grok -s "$SID" --cwd <absolute-worktree-path> \
   --always-approve --permission-mode bypassPermissions \
   --reasoning-effort xhigh --max-turns 1200 \
   --no-plan --no-subagents \
-  --deny 'Bash(git *)' --deny 'Bash(git)' \
+  $GIT_POLICY_FLAGS \
   > <scratch>/grok-<track>.log 2>&1
 ```
+
+### Git policy — pick one profile per delegation
+
+`--deny 'Bash(git *)'` blocks *all* git, including reads — grok then cannot
+inspect commit history, blame, or PRs, which hurts investigation-heavy tasks.
+Choose deliberately:
+
+```bash
+# 1) strict (recommended default): block state changes, allow reads
+#    (git log/show/diff/blame and gh pr list/view still work).
+#    Field-tested: reads pass, `git commit` is blocked, HEAD unchanged.
+GIT_POLICY_FLAGS="--deny 'Bash(git commit*)' --deny 'Bash(git push*)' \
+  --deny 'Bash(git checkout*)' --deny 'Bash(git switch*)' \
+  --deny 'Bash(git stash*)' --deny 'Bash(git restore*)' \
+  --deny 'Bash(git add*)' --deny 'Bash(git rebase*)' \
+  --deny 'Bash(git reset*)' --deny 'Bash(git merge*)' \
+  --deny 'Bash(git cherry-pick*)' --deny 'Bash(git tag*)' \
+  --deny 'Bash(git worktree*)' --deny 'Bash(gh pr create*)' \
+  --deny 'Bash(gh pr merge*)' --deny 'Bash(gh repo *)'"
+
+# 2) readonly-plus (paranoid): the old blanket ban. Use for parallel tracks
+#    with tight file boundaries where even a git read prompt is unwanted.
+GIT_POLICY_FLAGS="--deny 'Bash(git *)' --deny 'Bash(git)'"
+
+# 3) trusted: no git denies. Only inside an isolated worktree
+#    (--worktree or a lead-created one), when you WANT grok to make WIP
+#    commits at round boundaries. The lead still reviews history and merges.
+GIT_POLICY_FLAGS=""
+```
+
+Glob denies are a safety net, not a proof — exotic forms (`git -C <path>
+commit`) can slip past subcommand patterns. Keep the preamble's git rules in
+the spec as the second layer, and treat profile 3 as trust + isolation, not
+as enforcement.
 
 **Always prepend the preamble** (`references/spec-preamble.md`). Every item
 in it comes from a real incident. Do not tell grok to "go read that file" —
@@ -62,8 +96,9 @@ Field-tested flag notes:
   completion checklist; on an empty turn, resume with `-r <SID>` and say
   "you must call tools and do the work this turn" (this is why the default
   form pins a session id with `-s`).
-- **Enforce the git ban mechanically** (`--deny 'Bash(git *)'`). Commits,
-  restores and stashes belong to the lead only.
+- **Enforce the git policy mechanically** (profiles above). Commits, restores
+  and stashes belong to the lead in profiles 1–2; profile 3 delegates WIP
+  commits but never pushes/merges.
 - For potentially destructive large tasks, isolate with `--worktree` (grok
   runs in a fresh git worktree) and collect only the diff.
 - `--reasoning-effort xhigh` and `--max-turns 1200` keep depth requirements
@@ -227,3 +262,14 @@ patterns or large volumes.
   task. A reference of a different effect type transplants the wrong visual
   language — if you attach references, say "borrow the color/edge
   discipline, not the shapes".
+
+## Local overlay (project/user-specific context)
+
+If `references/local-overlay.md` exists next to this skill, **read it and
+apply it on top of these instructions** — it holds the project- or
+user-specific context that does not belong in the shared skill: role tables,
+project trap docs to quote, scratch-path conventions, model-assignment
+tables, house gate recipes. When merging spec preambles
+(`cat spec-preamble.md [local-overlay.md] task.md`), include it between the
+shared preamble and the task spec. The installer preserves an existing
+overlay on upgrade; this repository never ships one.

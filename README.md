@@ -49,7 +49,21 @@ grok에게 위임할 때 스펙에 넣는 다섯 장치 — 각각이 실험에�
 4. **시각 자기검증** — 자기 캡처를 열어 계약과 대조, 1번 항목은 항상 정체성 가독
 5. **로직 설계 원칙 4항** — derive-don't-store · 로드 시 재정규화 · 입력 3분류 방어 · 적대적 API 셀프 리뷰
 
-플래그는 `--reasoning-effort xhigh --max-turns 1200 --always-approve --deny 'Bash(git *)'` 조합이 실측 기준입니다 (근거는 SKILL.md 참조).
+플래그는 `--reasoning-effort xhigh --max-turns 1200 --always-approve` + **git 정책 프로파일**이 실측 기준입니다 (근거는 SKILL.md 참조).
+
+## Git policy profiles
+
+`--deny 'Bash(git *)'` 전면 차단은 grok이 커밋 이력·blame·PR 조회조차 못 하게 만듭니다. 세 프로파일 중 위임마다 선택하세요:
+
+1. **strict (기본 권장)** — 상태 변경 서브커맨드만 열거 차단, 읽기(`git log/show/diff/blame`, `gh pr list/view`)는 허용. 실측: 읽기 통과, `git commit` 차단, HEAD 불변.
+2. **readonly-plus** — 종전의 전면 차단. 파일 경계가 민감한 병렬 트랙용.
+3. **trusted** — deny 없음. **격리 워크트리 한정**으로, grok이 라운드 경계마다 WIP 커밋을 하길 원할 때. push/merge는 여전히 리드 몫.
+
+glob deny는 안전망이지 증명이 아닙니다(`git -C <path> commit` 류 우회 가능) — 프리앰블의 git 규칙을 2차 방어선으로 유지하세요.
+
+## Local overlay
+
+공유 스킬 본문에 넣을 수 없는 **프로젝트/개인 전용 컨텍스트**(역할표·함정 문서 목록·경로 규약·모델 배정표)는 `references/local-overlay.md`로 두세요. 스킬이 자동으로 함께 적용하고, `install.sh`가 업그레이드 시 보존합니다. 이 레포는 오버레이를 배포하지 않습니다.
 
 ## Known limits (정직하게)
 

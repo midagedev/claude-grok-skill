@@ -33,6 +33,21 @@ if [ -d "$DEST" ] && [ "$FORCE" -ne 1 ]; then
   fi
 fi
 
+# Preserve a user's local overlay across upgrades (never shipped by this repo).
+OVERLAY="$DEST/references/local-overlay.md"
+TMP_OVERLAY=""
+if [ -f "$OVERLAY" ]; then
+  TMP_OVERLAY="$(mktemp)"
+  cp "$OVERLAY" "$TMP_OVERLAY"
+fi
+
 mkdir -p "$DEST"
 cp -R "$SRC/." "$DEST/"
+
+if [ -n "$TMP_OVERLAY" ]; then
+  mkdir -p "$DEST/references"
+  cp "$TMP_OVERLAY" "$OVERLAY"
+  rm -f "$TMP_OVERLAY"
+  echo "preserved local overlay: $OVERLAY"
+fi
 echo "installed. In Claude Code, invoke with /grok-delegate (requires an authenticated grok CLI)."
