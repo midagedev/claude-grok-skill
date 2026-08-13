@@ -56,7 +56,7 @@ What actually closed the quality gap, each device with a measured effect:
 
 ## Does it actually work?
 
-We measured it, 9 rounds. Each round: the *same spec* went to the grok CLI (headless) and to **Claude Opus 5** — one round to **Claude Fable 5** — in parallel git worktrees. The task was always real production work from a Three.js/WebGPU cel-shaded action scene ([live](https://midagedev.github.io/i-circus-site/)): implement a module *and author its own verification gate*. Outputs were judged **blind** — unlabeled sources, labels swapped every round, judge forbidden to guess authorship. The short version:
+We measured it, 9 rounds. Each round: the *same spec* went to **grok-4.6** (headless CLI) and to **Claude Opus 5** — one round to **Claude Fable 5** — in parallel git worktrees. The task was always real production work from a Three.js/WebGPU project: implement a module *and author its own verification gate*. Outputs were judged **blind** — unlabeled sources, labels swapped every round, judge forbidden to guess authorship. The short version:
 
 - **Baseline: clear loss to Opus 5.** 0:5 blind verdict; grok wrote 14 test assertions where Opus 5 wrote 24.
 - **With the bundle: the gap closed where it matters.** grok's assertion depth went 14 → 42 → 67 → **81**; the visual axis flipped to grok wins in the last two rounds (once over Opus 5, once over Fable 5); grok ran 2–4× faster throughout.
