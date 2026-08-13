@@ -40,6 +40,7 @@ cat <skill-dir>/references/spec-preamble.md \
 SID=$(uuidgen | tr 'A-Z' 'a-z'); echo "$SID" > <scratch>/sid-<track>.txt
 grok -s "$SID" --cwd <absolute-worktree-path> \
   --prompt-file <scratch>/spec.md \
+  -m grok-4.6 --no-memory \
   --always-approve --permission-mode bypassPermissions \
   --reasoning-effort xhigh --max-turns 1200 \
   --no-plan --no-subagents \
@@ -70,8 +71,8 @@ GIT_POLICY_FLAGS="--deny 'Bash(git commit*)' --deny 'Bash(git push*)' \
 #    with tight file boundaries where even a git read prompt is unwanted.
 GIT_POLICY_FLAGS="--deny 'Bash(git *)' --deny 'Bash(git)'"
 
-# 3) trusted: no git denies. Only inside an isolated worktree
-#    (--worktree or a lead-created one), when you WANT grok to make WIP
+# 3) trusted: no git denies. Only inside an isolated worktree the lead
+#    created (see "Parallel tracks"), when you WANT grok to make WIP
 #    commits at round boundaries. The lead still reviews history and merges.
 GIT_POLICY_FLAGS=""
 ```
@@ -99,11 +100,30 @@ Field-tested flag notes:
 - **Enforce the git policy mechanically** (profiles above). Commits, restores
   and stashes belong to the lead in profiles 1–2; profile 3 delegates WIP
   commits but never pushes/merges.
-- For potentially destructive large tasks, isolate with `--worktree` (grok
-  runs in a fresh git worktree) and collect only the diff.
+- **Deny only with `Bash(...)` command patterns — tool-name denies are a
+  trap.** grok's native tool names are lowercase (`write`,
+  `search_replace`); `--deny write` passes without error and the file still
+  gets written, while an unknown name like `--deny NotebookEdit` hard-errors
+  the whole call. Get file-safety from worktree isolation plus the spec's
+  file boundary, not from tool denies.
+- **Pin the model with `-m`.** The default drifts across accounts and CLI
+  versions (4.5 ↔ 4.6), and `grok models` shows the *unauthenticated*
+  default when logged out — easy to misread. Every number in this skill was
+  measured on grok-4.6.
+- **Pass `--no-memory`.** If `--experimental-memory` is enabled in config,
+  assumptions leak between rounds and reproducibility dies — same purpose as
+  the `-s` pin-once / `-r` resume discipline.
+- For potentially destructive large tasks, isolate in a **lead-created git
+  worktree** (recipe under "Parallel tracks") and collect only the diff.
+  The CLI's own `--worktree` flag belongs to interactive sessions — in
+  headless `-p`/`--prompt-file` runs no worktree is created (field-tested,
+  and stated in `--help`).
 - `--reasoning-effort xhigh` and `--max-turns 1200` keep depth requirements
   from being squeezed by the turn cap; with `--prompt-file` this combination
   completes multi-hundred-line packages in one turn.
+- **The "implementation tokens are free" premise is measurable, not an
+  article of faith**: `--output-format json` returns `usage`,
+  `total_cost_usd` and `modelUsage` — sample a round and check.
 
 ### Follow-up in the same context
 
@@ -289,8 +309,11 @@ patterns or large volumes.
   have produced "the edit didn't land" misdiagnoses (it read the wrong
   copy). Put absolute paths in the spec's file lists and verification
   commands too.
-- **macOS has no `timeout(1)`.** Don't wrap grok in `timeout`; run it in the
-  background through your harness and watch the log/tree instead.
+- **Don't wrap grok in `timeout`.** Killing it mid-run leaves a half-written
+  tree that reads as a grok defect on review. (Stock macOS also lacks
+  `timeout(1)`; coreutils adds one — but the half-written-tree reason holds
+  everywhere.) Run it in the background through your harness and watch the
+  log/tree instead.
 - Before diagnosing a hung delegation or lock contention, `pgrep -fl grok` —
   idle sessions left over from earlier rounds are common and easy to
   mistake for your run.

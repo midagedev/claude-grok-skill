@@ -17,11 +17,14 @@ revert the same mistakes. Obey these before the task content.
 
 ## 1. Investigate before writing code
 
-- **Find and read the repository's "trap docs" first.** Places like
-  `CLAUDE.md`, `AGENTS.md`, `docs/decisions/`, or a "hard-won knowledge"
-  section hold things someone already got burned by. Quote the items that
-  apply to this task in your final report. If none apply, say "none apply"
-  and list the files you checked.
+- **Use the repository's "trap docs" — but don't re-read what you already
+  have.** The CLI auto-injects `CLAUDE.md` and `.claude/rules/*` into your
+  context wholesale; treat those as already read and quote from them
+  directly. Spend search turns only on what is **not** auto-injected:
+  `docs/decisions/`, module-header contract comments, "hard-won knowledge"
+  sections, and any file the task spec names. Quote the items that apply to
+  this task in your final report. If none apply, say "none apply" and list
+  the files you checked.
   - Two real defects were things *already written* in such a doc. One was
     "the issue tracker localizes status/priority names per account — key all
     logic on ids or categories", the other was "the sync-health badge reads
