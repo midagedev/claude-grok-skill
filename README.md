@@ -56,26 +56,28 @@ What actually closed the quality gap, each device with a measured effect:
 
 ## Does it actually work?
 
-We gave the *same spec* to grok and to stronger implementer models in parallel worktrees, 9 rounds, and judged the outputs blind (unlabeled, labels swapped every round). The short version:
+We measured it, 9 rounds. Each round: the *same spec* went to the grok CLI (headless) and to **Claude Opus 5** — one round to **Claude Fable 5** — in parallel git worktrees. The task was always real production work from a Three.js/WebGPU cel-shaded action scene ([live](https://midagedev.github.io/i-circus-site/)): implement a module *and author its own verification gate*. Outputs were judged **blind** — unlabeled sources, labels swapped every round, judge forbidden to guess authorship. The short version:
 
-- **Baseline: clear loss.** 0:5 blind verdict; grok wrote 14 test assertions where the opponent wrote 24.
-- **With the bundle: the gap closed where it matters.** Assertion depth went 14 → 42 → 67 → **81**; the visual axis flipped to grok wins in the last two rounds; grok ran 2–4× faster throughout.
-- **What stayed hard:** design-weight logic cores (state machines, serialization) remained a loss even with bundle v3 — so the skill says to keep those with Claude and let grok review.
+- **Baseline: clear loss to Opus 5.** 0:5 blind verdict; grok wrote 14 test assertions where Opus 5 wrote 24.
+- **With the bundle: the gap closed where it matters.** grok's assertion depth went 14 → 42 → 67 → **81**; the visual axis flipped to grok wins in the last two rounds (once over Opus 5, once over Fable 5); grok ran 2–4× faster throughout.
+- **What stayed hard:** design-weight logic cores (state machines, serialization) stayed with the Claude side all three times it was tested — so the skill says to keep those with Claude and let grok review.
 - **Best single finding:** grok's blind losses were mostly **missing defaults, not missing capability** — and defaults can be written into a spec.
 
 <details>
 <summary>Full experiment table (E1–E9)</summary>
 
-| Exp | Task | Device added to grok's spec | Blind verdict | Measured |
+Opponent is **Claude Opus 5** in every round except E8 (**Claude Fable 5**). E5/E6 are grok-vs-grok A/B rounds isolating one device. "Assertions" counts each model's self-authored gate depth for the same contract.
+
+| Exp | The actual task | Device added to grok's spec | Blind verdict | Measured |
 |---|---|---|---|---|
-| E1 | VFX module (energy barrier) | — (baseline) | lost 0:5 | assertions 14 vs 24 |
-| E2 | VFX (destruction burst) | — (replication) | lost | assertions 12 vs 32; 1.5× faster |
-| E3 | VFX (cloud parallax) | fairness fixes + self visual verification | lost — didn't read as its subject | failure traced to the checklist, not the model |
-| E5 | exposure flash + hitstop | + `--rules` preamble, contract↔assertion mapping table (v1) | **won 2:0:1** (grok A/B) | assertions 10 → 42 |
-| E6 | graze sparks | reference-image injection | **rejected 4:0:1** | references only help for the same effect type |
-| E7 | bullet-time system | + quantified depth, self-review, 1200 turns (v2) | **split: visual won**, logic lost | assertions 67 vs 95; gap 3×+ → 1.4×; 2.2× faster |
-| E8 | FOV cue system | v2, vs a stronger model | split: visual won, code lost | opponent caught a defect in *our own spec* |
-| E9 | timing-judge state machine | + 4 logic design principles (v3) | lost; reviewer credited grok's design choices | assertions 81; fastest run (1,112 s) |
+| E1 | Energy-barrier VFX: hit ripple + rim shader (TSL) with a numeric gate | — (baseline) | lost 0:5 to Opus 5 | assertions 14 vs 24 |
+| E2 | Shoot-down destruction: debris burst + flash timing | — (replication) | lost to Opus 5 | assertions 12 vs 32; grok 1.5× faster |
+| E3 | Cel-sky cloud layer: 3-plane parallax billboards | fairness fixes + self visual verification | lost — render didn't read as clouds | failure traced to the checklist, not the model |
+| E5 | Screen exposure flash + hitstop on impact | + `--rules` preamble, contract↔assertion mapping table (v1) | **won 2:0:1** (grok A/B) | assertions 10 → 42 |
+| E6 | Near-miss graze sparks | reference-image injection (A/B) | **injection rejected 4:0:1** | references only help for the same effect type |
+| E7 | Bullet-time: timeScale state machine + cel clock-motif visual | + quantified depth, self-review, 1200 turns (v2) | **split vs Opus 5: visual axis won**, logic lost | assertions 67 vs 95 — gap 3×+ → 1.4×; 2.2× faster |
+| E8 | Camera FOV cues: tele hold/release ladder tied to engagement phases | v2, **vs Claude Fable 5** | split: visual won, code lost | Fable also caught a defect in *our own spec* |
+| E9 | QTE timing judge: hit windows + combo state machine over a replay timeline | + 4 logic design principles (v3) | lost to Opus 5; reviewer credited grok's single-time-axis design | assertions 81; fastest run of the series (1,112 s) |
 
 The E3 lesson: grok self-reported SHIP on all six checklist axes and still lost — the render didn't *read as a cloud*. Every axis it checked was valid; the failure lived outside the checklist. Making **identity legibility** mandatory item #1 is what preceded the E7/E8 visual wins.
 
