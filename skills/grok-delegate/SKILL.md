@@ -44,8 +44,10 @@ grok -s "$SID" --cwd <absolute-worktree-path> \
   --always-approve --permission-mode bypassPermissions \
   --reasoning-effort xhigh --max-turns 1200 \
   --no-plan --no-subagents \
+  --output-format streaming-json \
   $GIT_POLICY_FLAGS \
-  > <scratch>/grok-<track>.log 2>&1
+  > <scratch>/grok-<track>.ndjson \
+  2> <scratch>/grok-<track>.err
 ```
 
 ### Git policy — pick one profile per delegation
@@ -113,6 +115,12 @@ Field-tested flag notes:
 - **Pass `--no-memory`.** If `--experimental-memory` is enabled in config,
   assumptions leak between rounds and reproducibility dies — same purpose as
   the `-s` pin-once / `-r` resume discipline.
+- **`--output-format streaming-json` is the recommended log.** `plain` is
+  still the CLI default and still works; a dummy turn's stream included
+  `tool_call` (`toolName`, `rawInput`), `tool_call_update` (`rawOutput` when
+  `status` is `completed`), token-chunk `text`/`thought`, and `end`. Split
+  stderr so the NDJSON file stays line-parseable. See "Visibility and
+  intervention".
 - For potentially destructive large tasks, isolate in a **lead-created git
   worktree** (recipe under "Parallel tracks") and collect only the diff.
   The CLI's own `--worktree` flag belongs to interactive sessions — in
@@ -159,6 +167,104 @@ breakage is report-only. The lead applies diffs one track at a time.
 
 When you need to parse a verdict, add `--json-schema '<JSON Schema>'` —
 stdout becomes schema-constrained JSON.
+
+## Visibility and intervention
+
+Headless `--output-format plain` (CLI default) does not mark tool-call
+boundaries. `--output-format streaming-json` does. `--stream-events` is
+**not** a flag (`unexpected argument '--stream-events'`). Token deltas on
+the Messages-shaped stream use `--include-partial-messages` with
+`--output-format streaming-messages-json`.
+
+### Mid-round check (lead)
+
+From a clone of this repository (this script is **not** copied by
+`install.sh`):
+
+```bash
+python3 scripts/grok-progress.py --last 20 <scratch>/grok-<track>.ndjson
+python3 scripts/grok-progress.py --tail --tools-only <scratch>/grok-<track>.ndjson
+```
+
+Default output is at most 100 lines (over that: a count summary + last 5).
+`--tail` is uncapped and stamps `[mm:ss]` from follow start. Offline
+`streaming-json` has no per-event timestamp, so the clock prints `[--:--]`.
+
+The same session writes `~/.grok/sessions/<url-encoded-cwd>/<sid>/updates.jsonl`
+(ACP updates with unix timestamps, including `tool_call`). The progress
+script accepts that file. A `--output-format plain` dummy still wrote
+`tool_call` there; its stdout had no `"type":"tool_call"` lines.
+
+```bash
+grok sessions list          # from the same --cwd; shows id + summary
+grok sessions search <word>
+```
+
+After the process exits, `grok -r <SID> -p "…"` continues the same
+conversation (verified: named the three files already read). `grok export
+<SID>` and `grok trace --local -o <path> <SID>` both succeeded on a
+finished id.
+
+### Human path
+
+- Same `--cwd`: `grok sessions list` / `grok sessions search`.
+- After the run ends: `grok -r <SID> -p "…"` continues the conversation
+  (verified). Interactive `grok -r <SID>` with no `-p` was not captured
+  as a usable TUI attach in this work.
+- `grok dashboard` is a TUI of sessions in **that pager process**.
+  `grok dashboard --leader` is rejected (`unexpected argument '--leader'`;
+  tip: `--leader-socket`). A short TTY attach to
+  `grok dashboard --leader-socket <sock>` produced only a terminal query —
+  **not verified** as a way to watch a separate headless `-p` process.
+
+### Intervention
+
+**A second client does not steer a live `-p` turn.** While a dummy was in
+the tool loop, each of these printed `INTERVENED` **and** the original
+process finished all of its tools:
+
+- `grok -r <SID> -p "INTERVENTION…"` (no leader)
+- the same pair with `--leader --leader-socket <sock>`
+- ACP `session/load` + `session/prompt` on that id (the stream showed
+  `_x.ai/queue/changed` then `runningPromptId` for the new prompt)
+
+Do not use a second `-r` or ACP prompt to redirect a live round.
+
+**Stop, then resume with a revised spec:**
+
+```bash
+kill <pid>    # SIGTERM: wait-status 143; the NDJSON log has no `end` line
+grok -r "$SID" --prompt-file <revised-spec.md> \
+  -m grok-4.6 --no-memory --no-plan --no-subagents \
+  --always-approve --permission-mode bypassPermissions \
+  --reasoning-effort xhigh --max-turns 1200 \
+  --output-format streaming-json \
+  $GIT_POLICY_FLAGS \
+  > <scratch>/grok-<track>.ndjson \
+  2> <scratch>/grok-<track>.err
+```
+
+Completed tool results stay in the session (after SIGTERM, `-r` answered
+`alpha.txt` when that read had finished, and `none` when only `list_dir`
+had). Work after the last completed tool is lost. File edits already on
+disk are **not** rolled back (headless docs; the dummy itself was
+read-only). A 6s PTY `grok -r <SID>` with no `-p` did not stop the
+headless client.
+
+`grok leader list` did not discover a local
+`grok agent leader --leader-socket` (`No leader candidates found`) even
+while `--leader --leader-socket` clients ran against that socket.
+
+### Failure modes
+
+- Non-JSON / truncated last lines are skipped. Kill mid-write leaves no
+  `end` event.
+- `--tail` follows the open file descriptor. Path replacement (log
+  rotation) was not exercised — do not assume it is followed.
+- `available_commands` and `usage` are dropped; `thought` only with
+  `--thinking`. Missing those is not a hung agent.
+- Unknown `type` values are ignored. If a CLI upgrade goes silent, read
+  the checkpoint file from the preamble.
 
 ## Quality bundle (put these sections in every spec)
 

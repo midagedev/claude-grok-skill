@@ -33,8 +33,8 @@ You'll need [Claude Code](https://claude.com/claude-code) and an authenticated `
 Say **"run this via grok"** in any Claude Code session, or invoke `/grok-delegate`. Claude then:
 
 1. writes a **self-contained spec** — file paths, numeric contracts, verification commands — from the bundled preamble + template,
-2. launches grok **headless in the background** with the field-tested flag combo (`--reasoning-effort xhigh --max-turns 1200 --always-approve` + a git-safety profile),
-3. **reviews the result like a lead**: reads the diff itself, re-runs the gates under its own ownership, and walks an 8-point checklist of the places grok's reports actually leak.
+2. launches grok **headless in the background** with the field-tested flag combo (`--output-format streaming-json --reasoning-effort xhigh --max-turns 1200 --always-approve` + a git-safety profile),
+3. **reviews the result like a lead**: reads the diff itself, re-runs the gates under its own ownership, and walks an 8-point checklist of the places grok's reports actually leak. Mid-round, it can compress the NDJSON log with `scripts/grok-progress.py` (one line per tool call). `--output-format plain` still works.
 
 | Role | Owner |
 |---|---|
@@ -96,9 +96,10 @@ Where it settled (our production assignment table):
 
 | File | Purpose |
 |---|---|
-| `skills/grok-delegate/SKILL.md` | Invocation recipes, git-safety profiles, quality bundle, parallel-track isolation, lead review checklist |
+| `skills/grok-delegate/SKILL.md` | Invocation recipes, git-safety profiles, quality bundle, parallel-track isolation, visibility/intervention, lead review checklist |
 | `references/spec-preamble.md` | Shared rules prepended to every spec — every clause from a real incident |
 | `references/spec-template.md` | Per-task spec skeleton: contracts, depth requirements, visual self-verification |
+| `scripts/grok-progress.py` | Compress a `streaming-json` (or session `updates.jsonl`) log into one-line progress events |
 
 Safety default: delegations run with an enumerated git-deny profile — grok can read history and PRs but can't commit, push, or rewrite state; that stays with the lead. Three profiles (strict / read-only / trusted-in-worktree) are documented in SKILL.md.
 
@@ -113,6 +114,41 @@ Project- or user-specific context (role tables, house gate recipes, model assign
 - Reference images only help when they show the same effect type as the task.
 - grok's reports are largely honest; the risk is what they *don't* say — hence the lead review checklist.
 - Claude Code only for now. The SKILL.md format is portable, but we publish only what we've verified end-to-end.
+
+## Changelog
+
+### 2026-08-13 — visibility, intervention, and grok's built-in tools
+
+Everything below was measured, not inferred; what failed is documented as failing.
+
+- **Mid-round visibility.** `--output-format streaming-json` marks tool-call
+  boundaries (`plain`, the CLI default, does not). New
+  `scripts/grok-progress.py` compresses either that stream **or** the session's
+  own `~/.grok/sessions/<url-encoded-cwd>/<sid>/updates.jsonl` into one line
+  per tool call, capped at 100 lines so a lead can check a running round
+  without flooding its context. `updates.jsonl` is written regardless of
+  output format, so past `plain` runs are observable too.
+- **Progress checkpoints** (§9 of the shared preamble): the delegate appends
+  `PROGRESS <ISO-8601-UTC> <stage> <one line>` at every stage boundary, so the
+  lead has a fallback when the stream is missing or unparsable.
+- **Intervention, honestly.** A second client *cannot* steer a live `-p` turn:
+  `grok -r <SID> -p ...`, the same with a shared `--leader-socket`, and ACP
+  `session/load` + `session/prompt` all queue instead of redirecting — the
+  original turn ran to completion in every trial. The supported path is
+  `kill` (SIGTERM) then `-r <SID>` with a revised spec; completed tool results
+  survive, work after the last completed tool is lost, and on-disk edits are
+  not rolled back. `--stream-events` does not exist; `grok dashboard` was not
+  verified as a window onto a separate headless process.
+- **grok's built-in image and video tools.** `image_gen` / `image_edit` work in
+  headless sessions (`image_to_video` / `reference_to_video` report available).
+  Field notes now in SKILL.md: output lands outside the worktree under
+  `~/.grok/sessions/...`, it is JPEG (no alpha — chroma-key and matte if you
+  need transparency), 1024px at `1:1`, no `n`/count parameter, and consistency
+  across a set comes from one canonical generation plus `image_edit` derivations.
+- **Index of grok's bundled skills** (`~/.grok/bundled/skills/`): `imagine`,
+  the `game-*` asset family (`game-tilesets` enforces a real 2x2 tiling check),
+  document skills, `resume-*` session interop, and grok's own multi-agent loops
+  — with the caveat that those loops need `--no-subagents` dropped.
 
 ## License
 

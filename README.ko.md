@@ -33,8 +33,8 @@ cd claude-grok-skill
 아무 Claude Code 세션에서 **"이거 grok으로 돌려줘"**라고 말하거나 `/grok-delegate`를 입력하면, Claude가:
 
 1. 동봉된 프리앰블+템플릿으로 **자립적인 스펙**(파일 경로·수치 계약·검증 명령)을 쓰고,
-2. 실측 검증된 플래그 조합(`--reasoning-effort xhigh --max-turns 1200 --always-approve` + git 안전 프로파일)으로 grok을 **백그라운드 헤드리스 투입**하고,
-3. **리드답게 검수합니다**: diff를 직접 읽고, 게이트를 자기 소유로 재실행하고, grok 보고서가 실제로 새는 지점 8곳의 체크리스트를 돕니다.
+2. 실측 검증된 플래그 조합(`--output-format streaming-json --reasoning-effort xhigh --max-turns 1200 --always-approve` + git 안전 프로파일)으로 grok을 **백그라운드 헤드리스 투입**하고,
+3. **리드답게 검수합니다**: diff를 직접 읽고, 게이트를 자기 소유로 재실행하고, grok 보고서가 실제로 새는 지점 8곳의 체크리스트를 돕니다. 라운드 중간에는 `scripts/grok-progress.py`로 NDJSON 로그를 도구 호출 한 줄씩 압축해 봅니다. `--output-format plain`도 그대로 동작합니다.
 
 | 역할 | 담당 |
 |---|---|
@@ -113,6 +113,39 @@ E3의 교훈: grok은 체크리스트 6축 전부 SHIP을 자기 신고하고도
 - 참조 이미지는 과제와 같은 이펙트 유형일 때만 도움이 됩니다.
 - grok 보고서는 대체로 정직합니다; 위험은 *없는 것*입니다 — 그래서 리드 검수 체크리스트가 있습니다.
 - 지금은 Claude Code 전용입니다. SKILL.md 형식 자체는 이식 가능하지만, 끝까지 실증한 것만 공개합니다.
+
+## 변경 이력
+
+### 2026-08-13 — 진행 가시성, 중간 개입, grok 내장 도구
+
+아래는 전부 실측입니다. 안 되는 것은 안 된다고 적었습니다.
+
+- **라운드 중간 가시성.** `--output-format streaming-json`은 도구 호출 경계를
+  표시합니다(CLI 기본값 `plain`은 하지 않습니다). 신설 `scripts/grok-progress.py`가
+  그 스트림 **또는** 세션 자신의
+  `~/.grok/sessions/<인코딩된-cwd>/<sid>/updates.jsonl`을 도구 호출 한 줄로
+  압축합니다(기본 100줄 상한 — 리드가 돌고 있는 라운드를 컨텍스트 폭주 없이
+  확인하기 위한 것). `updates.jsonl`은 출력 포맷과 무관하게 기록되므로 과거
+  `plain` 실행도 관찰할 수 있습니다.
+- **진행 체크포인트**(공용 프리앰블 §9): 위임받은 에이전트가 단계 경계마다
+  `PROGRESS <ISO-8601-UTC> <단계> <한 줄>`을 append합니다. 스트림이 없거나
+  파싱이 깨질 때의 폴백입니다.
+- **중간 개입 — 정직하게.** 두 번째 클라이언트로 **진행 중인 `-p` 턴을 조종할 수
+  없습니다**: `grok -r <SID> -p ...`, 공유 `--leader-socket` 조합, ACP
+  `session/load` + `session/prompt` 모두 큐잉되고 원래 턴은 끝까지 완주했습니다.
+  지원되는 경로는 `kill`(SIGTERM) 후 수정 스펙으로 `-r <SID>` 재개입니다 —
+  완료된 도구 결과는 남고, 마지막 완료 도구 이후 작업은 손실되며, 디스크에 이미
+  반영된 편집은 되돌려지지 않습니다. `--stream-events`는 존재하지 않고,
+  `grok dashboard`는 별개 헤드리스 프로세스를 들여다보는 창으로 검증되지 않았습니다.
+- **grok 내장 이미지·비디오 도구.** 헤드리스 세션에서 `image_gen` / `image_edit`가
+  동작합니다(`image_to_video` / `reference_to_video`는 가용으로 보고됨). SKILL.md에
+  실측 특성을 적었습니다: 산출물이 워크트리 밖 `~/.grok/sessions/...`에 떨어짐,
+  JPEG라 알파 없음(투명이 필요하면 키컬러 생성 후 매팅), `1:1`에서 1024px,
+  `n`/count 파라미터 없음, 세트 일관성은 캐노니컬 1장 + `image_edit` 파생으로.
+- **grok 번들 스킬 인덱스**(`~/.grok/bundled/skills/`): `imagine`, `game-*` 에셋
+  계열(`game-tilesets`는 실제 2x2 타일링 검증을 강제), 문서 스킬, `resume-*` 세션
+  인터롭, grok 자체 멀티에이전트 루프 — 단 그 루프를 쓰려면 `--no-subagents`를
+  빼야 합니다.
 
 ## License
 

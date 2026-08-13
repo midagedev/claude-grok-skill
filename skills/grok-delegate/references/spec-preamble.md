@@ -115,6 +115,17 @@ revert the same mistakes. Obey these before the task content.
   converge toward the numeric contract — that is verification, not taste.)
 - Comments follow **the language of the surrounding code** (varies by file).
 
+## 9. Progress checkpoints
+
+At every stage boundary, append exactly one line to the progress log the
+task spec names (default `<scratch>/progress-<track>.log`):
+
+    PROGRESS <ISO-8601-UTC> <stage> <one line, no newline inside>
+
+Never rewrite the file. If it is not writable, skip and say so in the
+report. The lead uses this file when the NDJSON stream is missing or
+unparsable.
+
 ---
 
 # Final report format (missing items = incomplete)
