@@ -28,6 +28,23 @@ cd claude-grok-skill
 
 You'll need [Claude Code](https://claude.com/claude-code) and an authenticated `grok` CLI (a grok subscription).
 
+## Updating
+
+Marketplace installs:
+
+```
+/plugin marketplace update claude-grok-skill
+claude plugin update grok-delegate
+```
+
+Script installs:
+
+```bash
+git pull && ./install.sh
+```
+
+`install.sh` writes a checksum manifest at install time, so upgrading an unmodified install needs no flags. It refuses only when the installed copy was hand-edited since the last install — then `--force` discards those edits (`references/local-overlay.md` is always preserved). Installs made before the manifest existed may need `--force` once.
+
 ## Use
 
 Say **"run this via grok"** in any Claude Code session, or invoke `/grok-delegate`. Claude then:

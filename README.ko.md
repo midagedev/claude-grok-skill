@@ -28,6 +28,23 @@ cd claude-grok-skill
 
 [Claude Code](https://claude.com/claude-code)와 로그인된 `grok` CLI(grok 구독)가 필요합니다.
 
+## 업데이트
+
+마켓플레이스로 설치했다면:
+
+```
+/plugin marketplace update claude-grok-skill
+claude plugin update grok-delegate
+```
+
+스크립트로 설치했다면:
+
+```bash
+git pull && ./install.sh
+```
+
+`install.sh`는 설치 시점에 체크섬 매니페스트를 기록하므로, 손대지 않은 설치본의 업그레이드는 플래그 없이 통과합니다. 직전 설치 이후 설치본을 직접 수정한 경우에만 거부하며, 그때는 `--force`로 수정분을 버리고 덮어씁니다(`references/local-overlay.md`는 어느 경우든 보존). 매니페스트 도입 전에 설치한 사본은 최초 1회만 `--force`가 필요할 수 있습니다.
+
 ## 사용
 
 아무 Claude Code 세션에서 **"이거 grok으로 돌려줘"**라고 말하거나 `/grok-delegate`를 입력하면, Claude가:

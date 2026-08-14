@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions track `.claude-plugin/plugin.json`. Every rule added to the skill
 maps to a real field incident — the sections below say which.
 
+## [Unreleased]
+
+### Added
+- README "Updating" sections (marketplace and script paths, EN/KO).
+
+### Changed
+- `install.sh` now writes a checksum manifest (`.install-checksums`) and
+  refuses only when the installed copy was **hand-edited since the last
+  install** — plain upgrades no longer need `--force`. Installs are now
+  clean (stale files removed); `references/local-overlay.md` is still
+  preserved and never checksummed.
+
 ## [0.4.0] — 2026-08-14
 
 Two field-audit rounds folded in: a 9-delegation live session (2026-08-13:
