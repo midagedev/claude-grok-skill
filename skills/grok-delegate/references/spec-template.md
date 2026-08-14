@@ -1,8 +1,9 @@
 # Task: <one line>
 
 ## Files to read before starting (all of them — confirm in the report)
-1. <project contract doc, e.g. CLAUDE.md>
-2. <the spec/contract sections that govern this task>
+1. <every CLAUDE.md covering the edit-target directories, by absolute path —
+   nested apps/*/libs/* CLAUDE.md files are NOT auto-injected into grok>
+2. <project contract doc, e.g. root CLAUDE.md sections that govern this task>
 3. <the module(s) being touched or imitated — mark read-only ones>
 4. <known-trap files worth quoting, e.g. a module whose header documents a footgun>
 
@@ -23,6 +24,10 @@ Target files with exact paths. Current behavior / desired behavior.>
   report anything out of scope with coordinates.
 - Self-review pass: list 3 defect classes you may have missed; add an
   assertion for each or justify why not.
+- Shared-lib edits: **consumer census table** (every importer × what it
+  loses; "none" needs grep evidence). Moved/replaced functions:
+  **options/guards kept-vs-dropped table** across all old call sites.
+  Green tests alone are not completion — these tables are.
 
 ## Design principles (for logic/state-machine tasks — report where each applied)
 1. derive-don't-store
@@ -40,8 +45,11 @@ new looks is banned); end with per-axis self-verdicts (SHIP/FIX predictions):
 ④ <contract axis 4, e.g. bloom not swallowing the effect>
 
 ## Constraints unique to this task
-- <file boundary: writable paths + "everything else read-only">
+- <file boundary: exact writable-path whitelist + "everything else read-only".
+  Enumerate files one by one — never "the whole folder"; the list is the law>
 - <parallel-track note if applicable>
+- <for move/rename tasks: bidirectional reference check + "newly broken
+  links: 0" as a numeric completion criterion>
 
 ## Verification commands (completion criteria — paste real output; never pipe away exit codes)
 - [ ] <gate command> exit 0

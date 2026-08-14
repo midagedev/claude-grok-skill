@@ -1,12 +1,13 @@
 ---
 name: grok-delegate
 description: >
-  Delegate implementation AND vision-verdict work to the local grok CLI as a
-  cheap headless sub-agent while the lead Claude session stays
-  orchestration-only. Use when the user asks to run work "via grok", to save
-  tokens, or invokes /grok-delegate. grok reads images, so screenshot
-  verdicts can be delegated too; escalate to a Claude agent only when a grok
-  verdict contradicts instrumented measurements.
+  Delegate implementation, investigation/research AND vision-verdict work to
+  the local grok CLI as a cheap headless sub-agent while the lead Claude
+  session stays orchestration-only. Use when the user asks to run work "via
+  grok", to save tokens, or invokes /grok-delegate. grok does web research,
+  code census, report writing and reads images, so screenshot verdicts can
+  be delegated too; escalate to a Claude agent only when a grok verdict
+  contradicts instrumented measurements.
 ---
 
 # grok-delegate — using the grok CLI as an implementation sub-agent
@@ -18,6 +19,7 @@ Division of labor:
 | Orchestration, spec writing, diff review, gates, commits | Lead session (Claude) | spend expensive tokens only where judgment matters |
 | Code implementation, mechanical edits, numeric harnesses — **including look/UI work** | `grok` CLI (headless) | implementation tokens are effectively free on a grok subscription |
 | Screenshot / visual verdicts | `grok` CLI | passed a vision-judgment benchmark against instrumented ground truth; fall back to a Claude agent if a verdict ever contradicts measurements |
+| Investigation / research (web research, code census, sampling + instrumentation, report writing) | `grok` CLI | has WebSearch/WebFetch, image reading and file writing; deliverable is a file report, which suits delegation — trust the collected file:line facts, re-derive the verdicts (see the investigation profile) |
 
 Core principle: **grok is an executor of tight specs.** It has zero
 conversation context, so the spec must be self-contained (file paths,
@@ -25,6 +27,18 @@ contracts, completion criteria), and must never ask for taste judgments —
 only numeric contracts.
 
 ## Invocation recipe
+
+### Profile picker — decide these three things first
+
+| Delegation type | git profile | extra flags | spec must include |
+|---|---|---|---|
+| Implementation, single track | strict | — | file whitelist · numeric contract · verification commands · **every CLAUDE.md covering the targets** |
+| Implementation, parallel / risky / registers gates | strict (or trusted for WIP commits) | lead-created worktree `--cwd` | + track boundary, per-package gates, copy-artifacts-out rule |
+| Investigation / census / report | strict (git reads help) | `$RESEARCH_FLAGS` belt; keep `--no-subagents` | narrow questions · premise-check invitation · large output → files per section, not stdout |
+| Vision verdict | readonly-plus | `$RESEARCH_FLAGS`; `--json-schema` for the verdict | 3-element briefing (numeric context first · narrowed question · "do not judge" list); fresh SID, retire after one verdict |
+| Image/asset generation | strict | worktree `--cwd` | copy-out path for `~/.grok/sessions/...` outputs · JPEG/matting plan |
+
+Everything below details the rows of this table.
 
 ### One-shot task (default form)
 
@@ -84,9 +98,56 @@ commit`) can slip past subcommand patterns. Keep the preamble's git rules in
 the spec as the second layer, and treat profile 3 as trust + isolation, not
 as enforcement.
 
+### Read-only investigation profile (research / census / audit tasks)
+
+For investigation-only delegations (web research, code census, report
+writing — no tree changes wanted), add a write-block belt on top of a git
+profile:
+
+```bash
+RESEARCH_FLAGS="--deny Write --deny Edit --disallowed-tools write,search_replace"
+```
+
+Field-tested: five consecutive investigation runs with this belt +
+`--permission-mode bypassPermissions` produced zero tree changes. The part
+doing the enforcing is `--disallowed-tools` — bare tool-name `--deny`s are
+unreliable on their own (see the flag notes below) — so keep the belt
+intact as a set and still confirm with `git status --short` afterward.
+
+Investigation specs **still get the preamble**: its premise-checking,
+no-invented-copy and verdict-discipline rules all apply. The
+implementation-shaped report items (changed-file list, gate outputs) simply
+collapse — state in the spec "read-only task: report format items 1–2 are
+'no tree changes' plus your verification greps". If the deliverable is a
+large report, have grok **write it to files section by section** (one path
+per section, listed in the spec) instead of returning it on stdout.
+
+Two field-measured patterns for *consuming* investigation output:
+
+- **Fact collection is dense and trustworthy; verdicts are not.** Trust the
+  file:line citations, but re-derive every load-bearing conclusion from the
+  cited source before acting on it. grok skews conservative or wrong at the
+  judgment step — one census marked a finding "cannot determine" when a
+  single comparison of two constants in the cited source settled it.
+- **Premise corrections are signal, not noise.** The preamble instructs grok
+  to challenge the spec's own premises; when a report says "your background
+  claim / path is wrong", treat that as a top-priority finding (twice it
+  changed the direction of the resulting PR).
+
 **Always prepend the preamble** (`references/spec-preamble.md`). Every item
 in it comes from a real incident. Do not tell grok to "go read that file" —
 merge it into the prompt body; the spec must stand alone.
+
+**⚠ Nested CLAUDE.md files are NOT injected** (field-measured 2026-08-14 via
+`grok inspect`): grok walks only the **ancestor path of `--cwd`** for
+CLAUDE.md (`.claude/rules/*` all inject regardless). With `--cwd` at the
+repo root that means the global + root CLAUDE.md only — `apps/*/CLAUDE.md`
+and `libs/*/CLAUDE.md` inject **zero** times, and a lib's CLAUDE.md is an
+ancestor of **no** cwd, so it never injects at all. The lead must enumerate
+every CLAUDE.md covering the edit-target directories at the top of the
+spec's "Files to read before starting" list. (24h field audit: only 7 of 16
+task files compensated in the prompt, and the incident cluster sat exactly
+in the never-injected `libs/*`.)
 
 Field-tested flag notes:
 
@@ -107,7 +168,10 @@ Field-tested flag notes:
   `search_replace`); `--deny write` passes without error and the file still
   gets written, while an unknown name like `--deny NotebookEdit` hard-errors
   the whole call. Get file-safety from worktree isolation plus the spec's
-  file boundary, not from tool denies.
+  file boundary, not from tool denies. (`--disallowed-tools
+  write,search_replace` is a *different flag* and did hold across read-only
+  investigation runs — see the investigation profile above — but for
+  implementation runs, isolation + spec boundary remain the real fence.)
 - **Pin the model with `-m`.** The default drifts across accounts and CLI
   versions (4.5 ↔ 4.6), and `grok models` shows the *unauthenticated*
   default when logged out — easy to misread. Every number in this skill was
@@ -128,7 +192,9 @@ Field-tested flag notes:
   and stated in `--help`).
 - `--reasoning-effort xhigh` and `--max-turns 1200` keep depth requirements
   from being squeezed by the turn cap; with `--prompt-file` this combination
-  completes multi-hundred-line packages in one turn.
+  completes multi-hundred-line packages in one turn. The cap is a ceiling,
+  not a target — 800 has also been sufficient for large censuses; never
+  *lower* it to save tokens, that only truncates depth.
 - **The "implementation tokens are free" premise is measurable, not an
   article of faith**: `--output-format json` returns `usage`,
   `total_cost_usd` and `modelUsage` — sample a round and check.
@@ -167,6 +233,27 @@ breakage is report-only. The lead applies diffs one track at a time.
 
 When you need to parse a verdict, add `--json-schema '<JSON Schema>'` —
 stdout becomes schema-constrained JSON.
+
+### Vision verdict (one-shot judge)
+
+The lead never reads screenshots itself — image Reads bloat the lead
+transcript; only the judge's **text verdict** comes back. Recipe:
+
+- Fresh SID per verdict; the judge **retires after one verdict** (image
+  turns make these the heaviest sessions). A FIX round gets a *new* judge.
+- Flags: readonly-plus git profile + `$RESEARCH_FLAGS`; `--json-schema` for
+  a parseable SHIP/FIX verdict with per-axis fields.
+- The briefing has three mandatory elements (each earned by a round of
+  decisive verdicts): ① **numeric context first** — the measured table, so
+  the judge spends itself on perception, not re-measurement; ② a **narrowed
+  question** ("does it read as the same postcard?", "mood or underexposure?"
+  — never an open "evaluate this"); ③ a **"do not judge" list** for defects
+  a parallel track is already fixing, so rounds don't block each other. If
+  FIX is likely, pre-narrow the adjustable axes and safe floors.
+- Give the judge absolute image paths on disk; do not inline images into
+  the spec file.
+- A verdict that contradicts instrumented measurements escalates to a
+  Claude agent — that is the standing fallback, not a retry-with-grok.
 
 ## Visibility and intervention
 
@@ -307,6 +394,8 @@ contains only what is unique to this task:
 # Task: <one line>
 
 ## Files to read before starting (all of them — confirm in the report)
+- <every CLAUDE.md covering the edit-target directories, by absolute path —
+  nested ones are NOT auto-injected (see the warning above)>
 - <the project's contract docs / the modules being touched / prior-art files>
 
 ## Background (self-contained — the spec alone must be enough)
@@ -318,7 +407,8 @@ contains only what is unique to this task:
 - <pin the contract as values: supported range, behavior when unsupported, boundaries>
 
 ## Constraints unique to this task
-- <file boundary: writable paths + "everything else read-only">
+- <file boundary: exact writable-path whitelist, enumerated file by file —
+  never "the whole folder"; everything else read-only>
 - <if parallel tracks exist: their broken builds are not your fault — report only>
 
 ## Verification commands (completion criteria — paste real output, never hide exit codes behind pipes)
@@ -333,6 +423,31 @@ DONE-<track>
 
 - **Quote the applicable pitfalls yourself.** The preamble tells grok to go
   find the trap docs, but what the lead already knows, the lead should quote.
+- **Never pair an explicit file list with a folder-level phrase** ("all 10
+  below, so move the whole folder"). When list and folder disagree, grok
+  takes the wider reading. (Incident: the prose said "all", the list named
+  8, the folder held 15 — 7 unverified documents were moved, one still
+  live.) Enumerate exactly; the preamble makes the list a whitelist, but the
+  lead must not write the ambiguity in the first place.
+- **Never draw the scope fence at an app boundary when the edit target is a
+  shared lib.** "Rewrite `libs/<x>`, don't touch app Y" reads as "ignore app
+  Y" — but Y consumes the lib, and its regressions ship silently (two PRs
+  blocked this way: a scroll-triggered re-download regression and an
+  eviction-contract hole, both in the fenced-out app, both green on tests).
+  Write the fence as **"don't edit Y's files; census Y as a consumer and
+  report what it loses"**, and list the consumers you already know of in
+  the spec.
+- **Never order an unconditional "delete the dead code".** The lead's belief
+  that code is dead is a hypothesis, not a fact — phrase it as "delete only
+  with repo-wide consumer grep attached as evidence; otherwise leave it and
+  report". (A "dead" URL-TTL cache ordered deleted was live on another path.)
+- **Green is a necessary completion criterion, never a sufficient one.** All
+  8 blocking findings across 5 consecutive CHANGES_REQUESTED PRs happened
+  with tests and typecheck fully green — the defect classes (out-of-scope
+  consumer regressions, dropped guards, duplicated helpers, broken
+  references) live outside what green measures. Demand the preamble's report
+  tables (consumer × lost behavior; options/guards kept-vs-dropped) and the
+  numeric link check for moves as completion criteria in their own right.
 - **Never put 3+ independent jobs in one spec.** Defect rates rise with spec
   length; split boundaries into parallel tracks instead.
 - **Put a real artifact in the completion criteria.** Unit tests alone cover
@@ -362,10 +477,18 @@ DONE-<track>
 ### Review checklist (where defects actually leak)
 
 grok reports are largely honest — the problem is what the report does *not*
-say. Verified leak points, in order:
+say. **Review the `git diff`, not the report**: in one 3-delegation sample,
+2 of 3 real defects (scope overrun, a repointed skill link) read as normal
+in the report and were visible only in the diff. Verified leak points, in
+order:
 
-1. **grep for newly invented mapping/constant tables** — the data often
-   already has an equivalent field.
+1. **grep for newly invented mapping/constant tables and duplicated
+   helpers** — the data often already has an equivalent field, and the repo
+   often already has the helper (byte-identical `isCloudFrontGlobalResourceUrl`
+   and `formatBytes` copies both shipped green). When a near-copy of a
+   sibling implementation appears, diff it against the **latest** sibling
+   for dropped guards — a third drag-panel copy was blocked for missing
+   exactly the mount-clamp guard its predecessors had.
 2. **Compare against equivalent implementations on other surfaces** (web/TUI/
    CLI parity).
 3. **Execute user-facing text yourself** (`--help`, error strings) and check
@@ -380,6 +503,14 @@ say. Verified leak points, in order:
    based scanners skip untracked files, which looks like a pass.
 8. **For conditional features, verify the disabled path is unchanged** —
    hot-path costs don't show up in tests.
+9. **Read test wait conditions in the diff.** A `waitFor` on anything other
+   than the asserted state is a proxy wait — the test passes while proving
+   nothing, and the report shows only PASS. Test PASS means "it ran", not
+   "it's right".
+10. **After move/rename tasks, grep reference integrity in both directions
+    yourself** (links *out of* moved files at their new depth, links *into*
+    the old paths), and treat any edit that repointed `.claude/**`/skill
+    links into an archive as a red flag, not a fix.
 
 Fix small precision defects yourself on the spot; re-delegate only repeated
 patterns or large volumes.
@@ -436,7 +567,7 @@ the notable subset — read the SKILL.md at that path for details:
 | `game-animation-frames` | Video-first animation frame sets that actually cycle |
 | `game-character-consistency` | Same character across every generated image |
 | `game-ui-icons` | Game UI kits and icon sets |
-| `design` / `implement` / `review` / `execute-plan` | grok-internal multi-agent loops (writer↔reviewer consensus, implement-review-fix, PR-plan DAG execution). NOTE: these spawn grok subagents — drop `--no-subagents` if a spec asks for them; normally we keep our own lead-owned loop instead |
+| `design` / `implement` / `review` / `execute-plan` | grok-internal multi-agent loops (writer↔reviewer consensus, implement-review-fix, PR-plan DAG execution). NOTE: these spawn grok subagents — drop `--no-subagents` if a spec asks for them; normally we keep our own lead-owned loop instead. Mind the stdout-interleaving caveat under Operational tips |
 | `code-review` | Strict maintainability audit (abstraction quality, giant files, condition growth) |
 | `pr-babysit` | Monitor PRs: fix CI, address review comments, resolve conflicts, restack |
 | `pdf` / `docx` / `pptx` | Read/create/transform documents and slide decks |
@@ -455,6 +586,12 @@ the notable subset — read the SKILL.md at that path for details:
   completion marker (`DONE-<track>`) in the spec and, as a safety net, loop
   `-r <SID> -p "continue"` until the marker appears. `--no-plan` is required.
   With `--prompt-file` + xhigh + high turn caps this is rarely needed.
+- **Subagent stdout interleaves and corrupts report-shaped output.** On a
+  749-file census with grok subagents running in parallel, sections and
+  tables arrived garbled mid-report (field-tested; some tables unreadable).
+  Keep `--no-subagents` whenever the deliverable is a single report, or have
+  the report written to files section by section instead of stdout —
+  especially when tables carry the payload.
 - Keep gates from dumping data:URL bundle stacks — trap
   `process.on('uncaughtException')` and print the message only.
 - **Scope gates per package for parallel tracks.** Whole-tree builds fail on

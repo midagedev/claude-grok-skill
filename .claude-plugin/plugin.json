@@ -1,7 +1,7 @@
 {
   "name": "grok-delegate",
-  "version": "0.3.0",
-  "description": "Delegate implementation and vision-verdict work to the local grok CLI as a cheap headless sub-agent, while the lead Claude session stays orchestration-only.",
+  "version": "0.4.0",
+  "description": "Delegate implementation, investigation/research and vision-verdict work to the local grok CLI as a cheap headless sub-agent, while the lead Claude session stays orchestration-only.",
   "author": {
     "name": "midagedev",
     "url": "https://github.com/midagedev"

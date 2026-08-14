@@ -17,10 +17,14 @@ revert the same mistakes. Obey these before the task content.
 
 ## 1. Investigate before writing code
 
-- **Use the repository's "trap docs" — but don't re-read what you already
-  have.** The CLI auto-injects `CLAUDE.md` and `.claude/rules/*` into your
-  context wholesale; treat those as already read and quote from them
-  directly. Spend search turns only on what is **not** auto-injected:
+- **Use the repository's "trap docs" — and know what is NOT auto-injected.**
+  The CLI injects `.claude/rules/*` and only the CLAUDE.md files on the
+  **ancestor path of your `--cwd`** (field-measured 2026-08-14 via `grok
+  inspect`: with cwd at the repo root, nested `apps/*/CLAUDE.md` and
+  `libs/*/CLAUDE.md` inject **zero** times). Treat the injected ones as
+  already read. For every directory you edit, **open its own CLAUDE.md
+  yourself before touching code** — plus any the task spec lists. Then
+  spend search turns on the rest that is never injected:
   `docs/decisions/`, module-header contract comments, "hard-won knowledge"
   sections, and any file the task spec names. Quote the items that apply to
   this task in your final report. If none apply, say "none apply" and list
@@ -29,11 +33,26 @@ revert the same mistakes. Obey these before the task content.
     "the issue tracker localizes status/priority names per account — key all
     logic on ids or categories", the other was "the sync-health badge reads
     `sources.synced_at`". Reading the doc would have prevented both.
+- **This spec's own premises can be wrong — verify them against the code.**
+  If a path, a background claim, or an assumption stated in this spec
+  contradicts what you find in the repository, do not proceed on the spec's
+  version: correct it and flag the correction prominently in your report.
+  (Field-tested twice: a wrong "this app is Electron" premise and a wrong
+  file path were both caught by the implementer, and one correction changed
+  the direction of the resulting PR.)
 - **Before inventing a new mapping/constant table, grep for an existing
   field with the same meaning.** A priority-sorting name table
   (`"highest"→0` …) was once hand-built when the data already carried a
   `priority_rank`. If you do add a table, report "I searched for an existing
   axis and found none".
+- **The same goes for helpers and components: grep before writing a new
+  file.** If an implementation of the same knowledge exists, export and
+  reuse it; if a copy is truly unavoidable, copy the **latest** sibling
+  *including its guards* and report why the copy was necessary.
+  (Field incidents: a byte-identical `isCloudFrontGlobalResourceUrl` copy;
+  a `formatBytes` copy; a third drag-panel copy that dropped exactly the
+  mount-clamp guard its predecessors had — tests stayed green through all
+  three.)
 - **Check whether the same logic already exists on another surface.** When a
   project has web / TUI / CLI / server over the same data, find the other
   implementation and make **the same input produce the same result** — or
@@ -49,6 +68,19 @@ revert the same mistakes. Obey these before the task content.
     the user it was a regression that shuffled their sidebar every reload.
 - Losing side behaviors (ordering, caches, fallbacks, shortcuts) is also a
   regression. "The core works" is not done.
+- **Never declare code "dead" and delete it without repo-wide evidence.**
+  Unused on the path you are migrating is not unused in the repo. Before any
+  deletion, attach the consumer grep that proves it, or leave it and report.
+  Even when the spec itself says "delete the dead code", the grep evidence
+  is still required — specs get this wrong. (A "dead" URL-TTL cache was live
+  on another path; a checksum-verification option the old path enabled was
+  silently dropped during a migration, letting corrupted bytes be cached
+  permanently — tests green both times.)
+- **When moving or replacing a function, cross-check every option and guard
+  the old call sites enabled** (integrity checks, clamps, TTLs, negative
+  caches and the like) and report a kept/dropped table for the new path.
+  A migration is not "the happy path works" — it is "nothing the old path
+  switched on went dark".
 
 ## 3. Never invent user-facing copy
 
@@ -75,7 +107,22 @@ revert the same mistakes. Obey these before the task content.
 - Loosening thresholds/tolerances is forbidden. If unavoidable — don't;
   report instead.
 
-## 5. When spec requirements conflict, do not resolve silently
+## 5. Tests must earn their green
+
+- **Wait only on the state under test.** Never gate an assertion behind a
+  proxy condition — a `waitFor` on some *other* call or flag that merely
+  correlates with readiness. The test then passes while proving nothing.
+  (A negative assertion "`signin()` was not called" was once placed after
+  `waitFor(() => expect(mockIsEnabled).toHaveBeenCalled())` — green, but the
+  green no longer backed the claim, and the report showed only PASS.)
+- Negative assertions ("X was not called") run **right after render**; in
+  React Testing Library, `render` already flushes effects inside `act` —
+  there is nothing to wait for.
+- **Do not hand-write a new mock factory that mirrors the real
+  implementation.** Reuse the mock patterns/utilities of neighboring spec
+  files; hand copies drift from the code they imitate.
+
+## 6. When spec requirements conflict, do not resolve silently
 
 - If A and B cannot both hold, **don't quietly drop one** — find a third way
   that satisfies both, or report the conflict and pick the safer side. Always
@@ -84,10 +131,19 @@ revert the same mistakes. Obey these before the task content.
     current time"; the time base was silently dropped and outputs were
     forever dated in the past. One flag would have satisfied both.
 
-## 6. Dependency direction and scope
+## 7. Dependency direction and scope
 
 - **Report every new package import.** If the direction looks wrong (e.g. a
   config exporter importing a snapshot generator), extract to a shared spot.
+- **Editing shared code (`libs/**` or anything imported by more than one
+  app) requires a consumer census first.** grep every importer, and put a
+  table in your report: consumer × what this change makes it lose ("none"
+  needs the grep evidence attached). A scope fence like "don't touch app X"
+  means **"don't edit app X's files — but DO report the regressions your
+  lib change causes there"**, never "pretend app X doesn't exist".
+  (Two PRs were blocked this way: a rewritten shared thumbnail hook made an
+  out-of-scope app re-download on every scroll; two out-of-scope writers
+  never passed the new `caseId`, leaving a hole in the eviction contract.)
 - If you must step outside the spec's file boundary, make the **minimal**
   change and report it. Silently fixing and silently leaving gates broken
   are both wrong.
@@ -95,7 +151,38 @@ revert the same mistakes. Obey these before the task content.
   whole-tree build caused by files outside your scope is not your fault** —
   verify per package and report.
 
-## 7. Hot paths
+## 8. The task's file list is a whitelist
+
+- **Do not create, move, or modify any file that is not on the task spec's
+  list.**
+- If the list and a directory-level instruction disagree ("move the
+  folder", but only some of its files are listed), **the list wins.** Leave
+  unlisted files in place and report: "N files outside the list found,
+  untouched." (A folder was once moved wholesale on an "all of it" phrase
+  while the list named fewer files — 7 unverified documents went along, one
+  of them still live, and the lead had to revert.)
+- If you become convinced an unlisted file must be touched, **don't — report
+  it** with the reason and let the lead extend the list.
+
+## 9. File moves and renames
+
+- Moving a file breaks references in **both directions**: (a) relative links
+  *inside* the moved file now resolve from a new depth (`../foo` may need to
+  become `../../foo`), and (b) files elsewhere that point *at* the old path.
+  After a move, grep both directions and fix both. (One move fixed 15
+  inbound links but missed 11 outbound links whose depth had changed.)
+- **Files referenced by `.claude/**`, `CLAUDE.md`, or skills/rules: report
+  before moving them.** Moving breaks agent context, and repointing the
+  skill's link into an archive is not a fix — whether the target must stay
+  live is the lead's call, made *before* the move.
+- Verification: compare broken-link counts before and after the move with an
+  **executable check that also covers references from code files** — never
+  an `.md → .md`-only link checker (one PR claimed "0 newly broken" on that
+  basis while 15 code-file references broke; another PR's very line that
+  "fixed" a broken link was itself broken). Report **"newly broken: 0" as a
+  number**, not as a claim.
+
+## 10. Hot paths
 
 - If you added allocations or O(n) scans to a per-render / per-keystroke /
   per-request path, report it. For conditional features, **the disabled path
@@ -103,7 +190,7 @@ revert the same mistakes. Obey these before the task content.
   - A grouping feature once allocated a full row slice every render even
     with grouping off.
 
-## 8. Absolute bans
+## 11. Absolute bans
 
 - **No git commands**: commit / checkout / stash / restore / add / push /
   rebase. Read-only (`git log` / `show` / `diff` / `-S`) is allowed. The lead
@@ -115,7 +202,7 @@ revert the same mistakes. Obey these before the task content.
   converge toward the numeric contract — that is verification, not taste.)
 - Comments follow **the language of the surrounding code** (varies by file).
 
-## 9. Progress checkpoints
+## 12. Progress checkpoints
 
 At every stage boundary, append exactly one line to the progress log the
 task spec names (default `<scratch>/progress-<track>.log`):
@@ -138,10 +225,17 @@ unparsable.
    1. Trap-doc items that applied to this task (with the files you checked)
    2. New mappings/constants/tables, and the search for existing equivalents
    3. Whether other surfaces (web/tui/cli/server) produce identical results
-   4. Existing behavior that this change removed or weakened
+   4. Existing behavior that this change removed or weakened — for
+      shared-lib edits this is the **consumer × lost-behavior table**; for
+      moved/replaced functions, the **options/guards kept-vs-dropped table**
+      ("none" needs the grep evidence)
    5. New user-facing copy and its supporting file:line
    6. Changed test assertions and why (incl. why not a contract assertion)
    7. Spec conflicts / out-of-scope edits / new dependencies
    8. Costs added to hot paths
 4. What you could not implement or verify (do not hide it — the lead reads
    the diff anyway)
+5. What you **deliberately left untouched** — anything you judged out of
+   scope or outside the file whitelist (this is distinct from item 4:
+   "couldn't" vs "chose not to"). Each with its path and one line of
+   reasoning, e.g. "7 files outside the list found in the folder, untouched".
