@@ -9,6 +9,19 @@ maps to a real field incident — the sections below say which.
 
 ### Added
 - README "Updating" sections (marketplace and script paths, EN/KO).
+- **Round-completion evidence protocol** (SKILL.md) + `scripts/grok-round-status.py`.
+  Incident (2026-08-15, third in class): a lead nested the launch recipe one
+  background layer deep (`launch.sh &` inside a harness background command);
+  the harness fired "task completed" when the wrapper exited while grok kept
+  working as an orphan, and the truncated log plus clean tree read as a dead
+  round. Earlier members of the class: a watcher `pgrep` matching itself, and
+  exit-0-with-empty-turn. Structural fix: the launch recipe now writes a
+  `done-<track>.rc` sentinel after grok exits, the sentinel is the ONLY
+  completion proof, one-background-layer-only is an explicit rule, and the
+  status script renders the verdict (COMPLETED / RUNNING / DIED-NO-SENTINEL,
+  the last split by ndjson `end` into "sentinel lost" vs "killed mid-run").
+  Validated against live data: a running round, a finished pre-sentinel
+  round, and a missing track each got the correct verdict.
 
 ### Changed
 - `install.sh` now writes a checksum manifest (`.install-checksums`) and

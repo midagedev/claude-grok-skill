@@ -43,14 +43,20 @@ Everything below details the rows of this table.
 ### One-shot task (default form)
 
 Write the spec to a scratch file and pass it with `--prompt-file`. Run long
-tasks in the background and wait for the completion notification.
+tasks in the background. **Completion is proven by the sentinel file the
+recipe writes after grok exits — never by your harness's task notification**,
+which reports your wrapper shell's lifetime, not grok's (see "Round
+completion" below).
 
 ```bash
 # 1) Write the task spec, then prepend the shared preamble.
 cat <skill-dir>/references/spec-preamble.md \
     <scratch>/task.md > <scratch>/spec.md
 
-# 2) Run in the background; collect the log when it finishes.
+# 2) Run in the background — this whole block IS the background command.
+#    Do not wrap it in another layer (`launch.sh &`, exec chains, sleep
+#    guards): one background layer only, or the notification fires while
+#    grok survives as an orphan. The sentinel write must stay attached.
 SID=$(uuidgen | tr 'A-Z' 'a-z'); echo "$SID" > <scratch>/sid-<track>.txt
 grok -s "$SID" --cwd <absolute-worktree-path> \
   --prompt-file <scratch>/spec.md \
@@ -62,7 +68,31 @@ grok -s "$SID" --cwd <absolute-worktree-path> \
   $GIT_POLICY_FLAGS \
   > <scratch>/grok-<track>.ndjson \
   2> <scratch>/grok-<track>.err
+echo "rc=$? finished=$(date -u +%FT%TZ)" > <scratch>/done-<track>.rc
 ```
+
+### Round completion — what counts as evidence
+
+Field-measured failure class (three incidents): the lead treats a
+process-lifecycle signal as round completion and misdiagnoses a live round
+as dead (or a dead one as alive). A harness "task completed" notification, a
+wrapper shell exiting, `pgrep` matching your own watcher, and exit code 0
+have each produced a wrong verdict. The rules:
+
+- **The only completion proof is `done-<track>.rc`** (the sentinel above).
+  Notification without a sentinel = your wrapper exited early and the round
+  is still running — re-attach a watcher, don't collect.
+- Judge state with `scripts/grok-round-status.py` from a clone of this repo
+  (not copied by install.sh):
+  `python3 scripts/grok-round-status.py --scratch <scratch> --track <track>`
+  → `COMPLETED rc=…` / `RUNNING pid=…` / `DIED-NO-SENTINEL …` (the last one
+  distinguishes "finished but sentinel lost" via the ndjson `end` event from
+  "killed mid-run", which may have left a half-written tree).
+- If you must poll by process, match the exact session:
+  `pgrep -f "grok -s $SID"` — a bare `grok` pattern matches idle leftovers
+  and your own watcher loop.
+- A clean `git status` plus a truncated log is NOT "the agent did nothing" —
+  check RUNNING first; the round may simply not have edited yet.
 
 ### Git policy — pick one profile per delegation
 
