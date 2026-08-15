@@ -9,7 +9,7 @@
 | 백엔드 | 구동 | 잘하는 것 | 하드 제약 |
 |---|---|---|---|
 | **grok-4.6** | `grok` CLI | 구현, 웹 리서치, **비전 판정**, 이미지/비디오 생성 | 판정이 계측과 어긋나면 Claude로 에스컬레이션 |
-| **GLM-5.3** | z.ai 코딩플랜, `crush` CLI 경유 (`bin/glm-run.sh`) | 구현, 게이트 저작, 코드 조사, 정직한 공개 | **이미지를 못 봄**; 스타일/UI 상호작용 저작은 실측 열세 |
+| **GLM-5.3** | z.ai 코딩플랜을 `bin/glm-run.sh`가 **두 하네스** 중 하나로 구동 — 헤드리스 Claude Code(`claude -p`, 기본) 또는 `crush` CLI | 구현, 게이트 저작, 코드 조사, 정직한 공개 | **이미지를 못 봄**; 스타일/UI 상호작용 저작은 실측 열세 |
 
 래퍼가 아니라 **영수증이 붙은 운영 매뉴얼**입니다 — 백엔드별로 하나씩, 실측 실험 두 시리즈가 [아래](#실제로-되나)에 있습니다.
 
@@ -31,7 +31,7 @@ cd outsource
 ./install.sh --project  # 프로젝트 스코프: ./.claude/skills/outsource/
 ```
 
-[Claude Code](https://claude.com/claude-code)와 백엔드 최소 하나 — 인증된 `grok` CLI, 그리고/또는 `zai` 프로바이더 키가 설정된 `crush` CLI — 가 필요합니다.
+[Claude Code](https://claude.com/claude-code)와 백엔드 최소 하나가 필요합니다 — 인증된 `grok` CLI, 그리고/또는 `crush` 설정에 들어 있는 z.ai 코딩플랜 키(GLM 런처가 키를 거기서 읽고 기본은 헤드리스 Claude Code로 돌립니다 — `crush` CLI 자체는 `--harness crush`일 때만 필요).
 
 ## 업데이트
 
@@ -42,7 +42,7 @@ cd outsource
 아무 Claude Code 세션에서 **"grok으로 돌려"** 또는 **"glm/crush로 돌려"** 라고 말하거나 `/outsource`를 호출하면, Claude가:
 
 1. 번들된 preamble + 템플릿으로 **자기완결 스펙**(파일 경로, 수치 계약, 검증 명령)을 쓰고 (`references/spec-authoring.md`의 품질 번들이 실측으로 품질 격차를 닫은 장치들입니다),
-2. 백엔드를 **백그라운드 헤드리스**로 실전 검증된 레시피(`references/grok.md` / `references/glm.md`)대로 발사하고 — git 안전은 grok은 deny 프로파일, crush는 명령 문자열을 읽는 `PreToolUse` 가드(회귀 29케이스)로 강제 —,
+2. 백엔드를 **백그라운드 헤드리스**로 실전 검증된 레시피(`references/grok.md` / `references/glm.md`)대로 발사하고 — git 안전은 grok은 deny 프로파일, GLM 하네스들은 명령 문자열을 읽는 `PreToolUse` 가드(회귀 29케이스, 두 호출 규약 모두)로 강제 —,
 3. **리드답게 검수합니다**: diff를 직접 읽고, 게이트를 콜드로 재실행하고, 위임 보고서가 실제로 새는 지점 11개 체크리스트를 돕니다.
 
 핵심 원칙: **위임받는 쪽은 촘촘한 스펙의 실행자입니다.** 대화 컨텍스트가 없으니 모든 위임은 홀로 서야 하고, 취향 판단은 절대 시키지 않습니다 — 수치 계약만.
@@ -121,12 +121,12 @@ E3의 교훈: grok은 체크리스트 6축 전부 SHIP을 자평하고도 졌습
 |---|---|
 | `skills/outsource/SKILL.md` | 라우터: 백엔드 표, 스펙 조립, 리드 검수 체크리스트 |
 | `references/grok.md` | grok 백엔드: 플래그 조합, git 안전 프로파일, 센티널 완료 증명, 비전 판정 레시피, 이미지 생성, 가시성/개입 |
-| `references/glm.md` | GLM-5.3 백엔드: `glm-run.sh` 런처, crush 하네스 함정, 실측 행동 프로파일 |
+| `references/glm.md` | GLM-5.3 백엔드: 하네스 선택, 하네스별 함정, z.ai 모델 매핑 트랩, 실측 행동 프로파일 |
 | `references/spec-preamble.md` | 모든 스펙 앞에 붙는 공유 규칙 — 전부 실제 사고에서 나옴 |
 | `references/glm-preamble.md` | GLM 런타임 델타 (이미지 불가, 플래그 아닌 훅, 증거 규칙 §6–§11) |
 | `references/spec-authoring.md` | 품질 번들, 태스크 템플릿 해설, 리드의 스펙 작성 체크 |
 | `references/spec-template.md` | 태스크 스펙 골격: 계약, 깊이 요건, 검증 명령 |
-| `bin/glm-run.sh` · `bin/git-guard.sh` | GLM 런처(격리 config, 세션 재개)와 git 금지 훅(회귀 29케이스) |
+| `bin/glm-run.sh` · `bin/git-guard.sh` | GLM 런처(`--harness claude-code\|crush`, 트랙별 격리 config, 세션 재개)와 두 하네스 모두에서 동작하는 git 금지 훅 |
 | `scripts/grok-progress.py` · `scripts/grok-round-status.py` | grok NDJSON 스트림을 한 줄 진행 이벤트로 압축; 센티널로 라운드 상태 판정 |
 
 양 백엔드 공통 안전 기본값: 저장소 상태 git은 리드 전용 — grok은 열거형 deny 프로파일, GLM은 명령 문자열을 파싱하는 훅(`git -C … commit`, `env … git push`, `sudo git …`, 체이닝 전부 차단; 읽기 전용 git은 일부러 개방).
@@ -140,6 +140,7 @@ E3의 교훈: grok은 체크리스트 6축 전부 SHIP을 자평하고도 졌습
 - 스펙으로 못 쓰는 탐색형 문제는 위임 대상이 아닙니다 — 리드가 먼저 좁힙니다.
 - 설계 하중이 큰 로직은 번들 v3로도 완전히 닫히지 않았습니다; Claude로 쓰고 백엔드로 리뷰하세요.
 - GLM-5.3은 이미지를 못 봅니다, 예외 없이 — 그리고 (실측) 추측하는 대신 못 본다고 말합니다.
+- z.ai의 Anthropic 호환 엔드포인트는 모델명을 안 박으면 플랜 기본값(실측: glm-4.7)으로 조용히 매핑합니다. 그래서 런처가 모델을 고정하고, 실제로 어느 모델이 답했는지는 로그의 `modelUsage`로 확인합니다. Claude Code 하네스가 찍는 `total_cost_usd`는 Anthropic 단가 추정이지 플랜 청구액이 아닙니다.
 - 보고서는 양쪽 다 대체로 정직합니다; 위험은 *말하지 않는 것*에 있습니다 — 리드 검수 체크리스트가 있는 이유.
 - 아직 Claude Code 전용입니다. SKILL.md 형식은 이식 가능하지만, 끝까지 검증한 것만 공개합니다.
 

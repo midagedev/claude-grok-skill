@@ -3,10 +3,10 @@ name: outsource
 description: >
   Outsource implementation, investigation/research, numeric harnesses and
   vision-verdict work to third-party model CLIs running as headless
-  sub-agents — the grok CLI (grok-4.6) and GLM-5.3 (z.ai coding plan, via
-  the crush CLI) — while the lead Claude session stays orchestration-only.
-  Use when the user asks to run work via grok / crush / glm, to save
-  tokens, or invokes /outsource. Pick the backend by task: GLM-5.3 cannot
+  sub-agents — the grok CLI (grok-4.6) and GLM-5.3 (z.ai coding plan, run
+  through headless Claude Code or the crush CLI) — while the lead Claude
+  session stays orchestration-only. Use when the user asks to run work via
+  grok / glm / crush, to save tokens, or invokes /outsource. Pick the backend by task: GLM-5.3 cannot
   read images, so vision verdicts go to grok (or a Claude agent).
 ---
 
@@ -29,15 +29,20 @@ only numeric contracts.
 | Backend | Runs via | Strengths | Hard limits |
 |---|---|---|---|
 | **grok-4.6** | `grok` CLI, headless (`references/grok.md`) | implementation; web research (WebSearch/WebFetch); **vision verdicts** and image reading; image/video generation | verdicts contradicting instrumentation escalate to a Claude agent |
-| **GLM-5.3** | `crush` CLI on a z.ai coding-plan key, via `bin/glm-run.sh` (`references/glm.md`) | implementation, mechanical edits, gate authoring, code investigation; strong disclosure and premise-correction | **cannot see images at all**; style/look/UI-interaction authoring measured weaker — route those elsewhere |
+| **GLM-5.3** | z.ai coding plan, via `bin/glm-run.sh` on either harness — `claude -p` (default) or the `crush` CLI (`references/glm.md`) | implementation, mechanical edits, gate authoring, code investigation; strong disclosure and premise-correction | **cannot see images at all**; style/look/UI-interaction authoring measured weaker — route those elsewhere |
 
 Selection rules:
 
 - Anything that must **look at pixels** (screenshot verdicts, framing,
   colour) → grok or a Claude agent; never GLM-5.3.
 - Both backends parallelize: disjoint file whitelists, one worktree and one
-  config/session scope per track. Spreading tracks across the two providers
-  doubles headroom.
+  config/session scope per track. Spreading tracks across the two providers —
+  and, for GLM, across its two harnesses — multiplies headroom.
+- **Model vs harness are separate choices.** The harness is only how a model
+  is driven headlessly; the same spec, preamble and review checklist apply
+  whichever one runs. GLM-5.3 ships with two (`--harness claude-code|crush`);
+  pin the model explicitly, because z.ai maps an unqualified `claude-*`
+  request onto its plan default (measured: glm-4.7).
 - Site-local defaults (which backend is *your* default, model overrides)
   belong in `references/local-overlay.md`, not here.
 
@@ -58,9 +63,10 @@ Then invoke the backend exactly as its reference describes:
 - grok: `references/grok.md` — flag combo, git-safety profiles, sentinel
   completion proof, vision-verdict recipe, image generation, mid-round
   visibility and intervention.
-- GLM-5.3: `references/glm.md` — `bin/glm-run.sh` launcher (isolated
-  `CRUSH_GLOBAL_CONFIG`, scratch data dir, `SESSION <id>` resume),
-  `bin/git-guard.sh` PreToolUse hook, measured behavior profile.
+- GLM-5.3: `references/glm.md` — `bin/glm-run.sh` launcher (harness picker,
+  isolated config per track, `SESSION <id>` resume), `bin/git-guard.sh`
+  PreToolUse hook (works on both harnesses), z.ai model-mapping trap,
+  measured behavior profile.
 
 ## What the lead always does (backend-independent)
 

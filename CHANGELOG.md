@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0 — 2026-08-16 — GLM on two harnesses
+
+- `bin/glm-run.sh` gains `--harness claude-code|crush`. **claude-code is now
+  the default**: `claude -p` against z.ai's Anthropic-compatible endpoint,
+  with an isolated `CLAUDE_CONFIG_DIR`, the git guard attached as a
+  `PreToolUse` hook, and `--session` mapped to `--resume`. The crush path is
+  unchanged and still available.
+- `bin/git-guard.sh` now accepts **both call conventions** — the command in
+  `$CRUSH_TOOL_INPUT_COMMAND` (crush) or hook JSON on stdin (claude-code) —
+  so one guard serves every harness. Regression-tested on both.
+- Documented the measured z.ai model-mapping trap: an unqualified
+  `claude-*` request comes back as the plan default (glm-4.7), so the
+  launcher pins `ANTHROPIC_MODEL`; `modelUsage` in the log is the proof of
+  which model answered. Also: `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` are honoured
+  (an invalid token 401s), and the harness's `total_cost_usd` is an
+  Anthropic-priced estimate, not the plan's charge.
+
 ## 0.5.0 — 2026-08-16 — one skill, two backends: outsource
 
 - **Renamed** grok-delegate → **outsource**, and absorbed the glm-delegate

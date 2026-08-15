@@ -1,15 +1,26 @@
 #!/usr/bin/env bash
-# PreToolUse guard for delegated crush runs.
+# PreToolUse guard for delegated runs. Harness-agnostic: it reads the actual
+# command string, which is strictly stronger than glob denies — `git -C <path>
+# commit` and `env ... git push` are caught too.
 #
-# crush has no per-command deny flag (grok's --deny 'Bash(git commit*)' has no
-# equivalent): `permissions deny <tool>` hides a whole tool. So the git ban is
-# enforced here, on the actual command string. That is strictly stronger than
-# glob denies — `git -C <path> commit` and `env ... git push` are caught too.
+# Two call conventions, both supported so one guard serves every harness:
+#   crush        — command arrives in $CRUSH_TOOL_INPUT_COMMAND
+#   claude-code  — hook JSON arrives on stdin as {"tool_input":{"command":…}}
 #
 # Exit 2 = block this one call; the agent sees stderr and can try again.
 set -uo pipefail
 
 cmd="${CRUSH_TOOL_INPUT_COMMAND:-}"
+if [ -z "$cmd" ] && [ ! -t 0 ]; then
+  # Claude Code hands the tool call to hooks as JSON on stdin.
+  cmd="$(python3 -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+ti = d.get("tool_input") or {}
+print(ti.get("command", "") if isinstance(ti, dict) else "")' 2>/dev/null)"
+fi
 [ -n "$cmd" ] || exit 0
 
 # git subcommands that change repository state. Read-only git (log/show/diff/

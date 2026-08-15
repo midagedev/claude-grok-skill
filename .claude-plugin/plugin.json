@@ -1,6 +1,6 @@
 {
   "name": "outsource",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Outsource implementation, investigation and vision-verdict work to third-party model CLIs (grok-4.6, GLM-5.3 via crush) as headless sub-agents, while the lead Claude session stays orchestration-only.",
   "author": {
     "name": "midagedev",
@@ -10,16 +10,18 @@
   "repository": "https://github.com/midagedev/outsource",
   "license": "MIT",
   "keywords": [
-    "outsource",
+    "claude-code",
+    "crush",
     "delegation",
-    "sub-agent",
-    "subagent",
-    "grok",
     "glm",
     "glm-5.3",
-    "z.ai",
-    "crush",
+    "grok",
+    "headless",
     "orchestration",
-    "token-saving"
+    "outsource",
+    "sub-agent",
+    "subagent",
+    "token-saving",
+    "z.ai"
   ]
 }

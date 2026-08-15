@@ -9,7 +9,7 @@ A Claude Code skill that runs **third-party model CLIs as headless implementatio
 | Backend | Runs via | Good at | Hard limit |
 |---|---|---|---|
 | **grok-4.6** | `grok` CLI | implementation, web research, **vision verdicts**, image/video generation | escalate to Claude when a verdict contradicts instrumentation |
-| **GLM-5.3** | z.ai coding plan, through the `crush` CLI (`bin/glm-run.sh`) | implementation, gate authoring, code investigation, honest disclosure | **cannot see images**; style/UI-interaction authoring measured weaker |
+| **GLM-5.3** | z.ai coding plan, driven by `bin/glm-run.sh` on **either harness** — headless Claude Code (`claude -p`, default) or the `crush` CLI | implementation, gate authoring, code investigation, honest disclosure | **cannot see images**; style/UI-interaction authoring measured weaker |
 
 It's not a wrapper; it's an operating manual with receipts — two measured experiment series, one per backend, are [below](#does-it-actually-work).
 
@@ -31,7 +31,7 @@ cd outsource
 ./install.sh --project  # project scope: ./.claude/skills/outsource/
 ```
 
-You'll need [Claude Code](https://claude.com/claude-code) plus at least one backend: an authenticated `grok` CLI, and/or the `crush` CLI configured with a `zai` provider key.
+You'll need [Claude Code](https://claude.com/claude-code) plus at least one backend: an authenticated `grok` CLI, and/or a z.ai coding-plan key in your `crush` config (the GLM launcher reads the key from there and runs it on headless Claude Code by default — the `crush` CLI itself is only needed for `--harness crush`).
 
 ## Updating
 
@@ -42,7 +42,7 @@ Marketplace: `/plugin marketplace update outsource` then `claude plugin update o
 Say **"run this via grok"** or **"run this via glm/crush"** in any Claude Code session, or invoke `/outsource`. Claude then:
 
 1. writes a **self-contained spec** — file paths, numeric contracts, verification commands — from the bundled preamble + template (`references/spec-authoring.md` holds the quality bundle that closed the measured quality gap),
-2. launches the backend **headless in the background** with its field-tested recipe (`references/grok.md` / `references/glm.md`) — git safety enforced by deny-profiles on grok and by a `PreToolUse` command-string guard on crush (29 regression cases),
+2. launches the backend **headless in the background** with its field-tested recipe (`references/grok.md` / `references/glm.md`) — git safety enforced by deny-profiles on grok and by a `PreToolUse` command-string guard on the GLM harnesses (29 regression cases, both call conventions),
 3. **reviews the result like a lead**: reads the diff itself, re-runs the gates cold under its own ownership, and walks an 11-point checklist of the places delegated reports actually leak.
 
 The core principle: **the delegate is an executor of tight specs.** Zero conversation context, so every delegation stands alone — and never asks for taste judgments, only numeric contracts.
@@ -121,12 +121,12 @@ Where it settled (our production assignment table):
 |---|---|
 | `skills/outsource/SKILL.md` | The router: backend table, spec assembly, lead review checklist |
 | `references/grok.md` | grok backend: flag combo, git-safety profiles, sentinel completion proof, vision-verdict recipe, image generation, visibility/intervention |
-| `references/glm.md` | GLM-5.3 backend: `glm-run.sh` launcher, crush-harness quirks, measured behavior profile |
+| `references/glm.md` | GLM-5.3 backend: harness picker, per-harness quirks, the z.ai model-mapping trap, measured behavior profile |
 | `references/spec-preamble.md` | Shared rules prepended to every spec — every clause from a real incident |
 | `references/glm-preamble.md` | GLM runtime delta (no images, hooks not flags, evidence rules §6–§11) |
 | `references/spec-authoring.md` | The quality bundle, the per-task template walkthrough, lead-side spec checks |
 | `references/spec-template.md` | Per-task spec skeleton: contracts, depth requirements, verification commands |
-| `bin/glm-run.sh` · `bin/git-guard.sh` | GLM launcher (isolated config, session resume) and the git-ban hook (29 regression cases) |
+| `bin/glm-run.sh` · `bin/git-guard.sh` | GLM launcher (`--harness claude-code\|crush`, isolated config per track, session resume) and the git-ban hook, which works on both harnesses |
 | `scripts/grok-progress.py` · `scripts/grok-round-status.py` | Compress a grok NDJSON stream into one-line progress events; judge round state by sentinel |
 
 Safety default on both backends: repository-state git stays with the lead — grok via enumerated deny-profiles, GLM via a hook that parses the actual command string (`git -C … commit`, `env … git push`, `sudo git …` and chained mutations all blocked; read-only git deliberately open).
@@ -140,6 +140,7 @@ Project- or user-specific context (role tables, default-backend choice, house ga
 - Exploratory problems that can't be specced aren't delegation material — the lead narrows first.
 - Design-weight logic didn't fully close even with bundle v3; write those with Claude, review with a backend.
 - GLM-5.3 cannot read images, full stop — and (measured) it says so instead of guessing.
+- z.ai's Anthropic-compatible endpoint silently maps an unqualified `claude-*` request onto its plan default (measured: glm-4.7), so the launcher pins the model — check `modelUsage` in the log to see which model actually answered. The `total_cost_usd` the Claude Code harness prints is Anthropic-priced, not what the plan charges.
 - Reports are largely honest on both backends; the risk is what they *don't* say — hence the lead review checklist.
 - Claude Code only for now. The SKILL.md format is portable, but we publish only what we've verified end-to-end.
 
