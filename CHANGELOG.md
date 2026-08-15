@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.0 — 2026-08-16 — one skill, two backends: outsource
+
+- **Renamed** grok-delegate → **outsource**, and absorbed the glm-delegate
+  skill: one skill now routes to two backends — grok-4.6 (grok CLI) and
+  GLM-5.3 (z.ai coding plan via the crush CLI).
+- **Restructured**: SKILL.md is a thin router (backend table, spec assembly,
+  unified 11-point lead review checklist); per-backend operating manuals
+  moved to `references/grok.md` / `references/glm.md`; spec-authoring
+  material (quality bundle, per-task template checks) to
+  `references/spec-authoring.md`. The shared `spec-preamble.md` is
+  backend-neutral; `glm-preamble.md` carries the GLM runtime delta
+  (no images, hook-based git ban, evidence rules §6–§11).
+- **New GLM backend tooling**: `bin/glm-run.sh` (isolated
+  `CRUSH_GLOBAL_CONFIG`, scratch data dir, `SESSION <id>` resume) and
+  `bin/git-guard.sh` (command-string PreToolUse guard, 29 regression cases).
+- **New receipts** in the README: three shipped GLM solo rounds plus a
+  same-spec A/B vs an Opus subagent (N=3) — parity on pattern discovery,
+  premise correction and FAIL-first; three measured gaps, each promoted to
+  a spec rule.
+
+
 All notable changes to the `grok-delegate` skill/plugin are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions track `.claude-plugin/plugin.json`. Every rule added to the skill

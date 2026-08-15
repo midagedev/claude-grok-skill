@@ -1,10 +1,10 @@
 <!--
-This file is the shared front matter for every grok spec. The lead writes a
-per-task spec, then merges:
+This file is the shared front matter for every outsourced spec, whatever
+the backend. The lead writes a per-task spec, then merges:
 
-  cat skills/grok-delegate/references/spec-preamble.md task.md > spec.md
-
-and passes it via --prompt-file. Every rule here came from a real incident.
+  cat skills/outsource/references/spec-preamble.md \
+      [skills/outsource/references/glm-preamble.md]  \
+      task.md > spec.md          # glm delta only for GLM-5.3 runs Every rule here came from a real incident.
 If a task spec must relax one of these rules, state the exception explicitly
 in that spec.
 -->

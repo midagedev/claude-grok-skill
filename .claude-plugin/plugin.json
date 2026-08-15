@@ -1,13 +1,25 @@
 {
-  "name": "grok-delegate",
-  "version": "0.4.0",
-  "description": "Delegate implementation, investigation/research and vision-verdict work to the local grok CLI as a cheap headless sub-agent, while the lead Claude session stays orchestration-only.",
+  "name": "outsource",
+  "version": "0.5.0",
+  "description": "Outsource implementation, investigation and vision-verdict work to third-party model CLIs (grok-4.6, GLM-5.3 via crush) as headless sub-agents, while the lead Claude session stays orchestration-only.",
   "author": {
     "name": "midagedev",
     "url": "https://github.com/midagedev"
   },
-  "homepage": "https://github.com/midagedev/grok-delegate",
-  "repository": "https://github.com/midagedev/grok-delegate",
+  "homepage": "https://github.com/midagedev/outsource",
+  "repository": "https://github.com/midagedev/outsource",
   "license": "MIT",
-  "keywords": ["grok", "delegation", "sub-agent", "orchestration", "token-saving"]
+  "keywords": [
+    "outsource",
+    "delegation",
+    "sub-agent",
+    "subagent",
+    "grok",
+    "glm",
+    "glm-5.3",
+    "z.ai",
+    "crush",
+    "orchestration",
+    "token-saving"
+  ]
 }

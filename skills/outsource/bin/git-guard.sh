@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# PreToolUse guard for delegated crush runs.
+#
+# crush has no per-command deny flag (grok's --deny 'Bash(git commit*)' has no
+# equivalent): `permissions deny <tool>` hides a whole tool. So the git ban is
+# enforced here, on the actual command string. That is strictly stronger than
+# glob denies — `git -C <path> commit` and `env ... git push` are caught too.
+#
+# Exit 2 = block this one call; the agent sees stderr and can try again.
+set -uo pipefail
+
+cmd="${CRUSH_TOOL_INPUT_COMMAND:-}"
+[ -n "$cmd" ] || exit 0
+
+# git subcommands that change repository state. Read-only git (log/show/diff/
+# blame/status/ls-files/rev-parse/worktree list) stays available on purpose:
+# blanket bans cripple investigation work.
+deny_git='commit|push|checkout|switch|stash|restore|add|rm|mv|reset|rebase|merge|cherry-pick|revert|tag|branch|worktree|clean|filter-branch|update-ref|apply|am|fetch|pull|clone|remote|submodule|config|gc|prune|reflog|notes|replace|sparse-checkout|bisect'
+
+# Listing forms of otherwise-mutating subcommands. Delegation specs routinely
+# open with `git worktree list` to prove which tree the agent is in, so these
+# must survive the deny pass.
+# Erase the read-only forms, then run the deny pass on what is left. A line
+# that pairs a listing with a mutation (`git worktree list && git commit -am x`)
+# still trips the deny pass, because only the listing half is erased.
+allow_ro='(worktree[[:space:]]+list|branch[[:space:]]+(-[alvr]+|--list)|remote[[:space:]]+(-v|--verbose|show)|config[[:space:]]+(--get|--get-all|--list|-l))'
+scan=$(printf '%s' "$cmd" | sed -E "s/git([[:space:]]+-[^[:space:]]+)*[[:space:]]+$allow_ro/GIT_RO/gI")
+
+# `git` anywhere in the pipeline, with flags like -C/-c/--git-dir before the
+# subcommand, and ignoring a leading `sudo`/`env VAR=...`.
+if printf '%s' "$scan" | grep -qiE "(^|[;&|(]|\bsudo\b|\benv\b[^;&|]*)[[:space:]]*git([[:space:]]+(-[A-Za-z-]+([[:space:]]+[^[:space:]]+)?|--[a-z-]+(=[^[:space:]]+)?))*[[:space:]]+($deny_git)\b"; then
+  echo "BLOCKED: git 상태 변경은 리드 전용이다. 읽기 전용 git(log/show/diff/blame/status)만 허용된다. 복원이 필요하면 리드에게 요청하라." >&2
+  exit 2
+fi
+
+# gh commands that publish or mutate remote state.
+if printf '%s' "$scan" | grep -qiE "(^|[;&|(])[[:space:]]*gh[[:space:]]+(pr[[:space:]]+(create|merge|close|edit|ready|review)|repo[[:space:]]+(create|delete|edit|fork|sync)|release|workflow[[:space:]]+run|api[[:space:]]+-X[[:space:]]*(POST|PATCH|PUT|DELETE))"; then
+  echo "BLOCKED: PR/릴리스/원격 변경은 리드 전용이다. 읽기(gh pr list/view, gh api GET)만 허용된다." >&2
+  exit 2
+fi
+
+exit 0

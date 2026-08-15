@@ -1,30 +1,9 @@
----
-name: grok-delegate
-description: >
-  Delegate implementation, investigation/research AND vision-verdict work to
-  the local grok CLI as a cheap headless sub-agent while the lead Claude
-  session stays orchestration-only. Use when the user asks to run work "via
-  grok", to save tokens, or invokes /grok-delegate. grok does web research,
-  code census, report writing and reads images, so screenshot verdicts can
-  be delegated too; escalate to a Claude agent only when a grok verdict
-  contradicts instrumented measurements.
----
+# grok backend — running the grok CLI headless
 
-# grok-delegate — using the grok CLI as an implementation sub-agent
-
-Division of labor:
-
-| Role | Owner | Why |
-|------|-------|-----|
-| Orchestration, spec writing, diff review, gates, commits | Lead session (Claude) | spend expensive tokens only where judgment matters |
-| Code implementation, mechanical edits, numeric harnesses — **including look/UI work** | `grok` CLI (headless) | implementation tokens are effectively free on a grok subscription |
-| Screenshot / visual verdicts | `grok` CLI | passed a vision-judgment benchmark against instrumented ground truth; fall back to a Claude agent if a verdict ever contradicts measurements |
-| Investigation / research (web research, code census, sampling + instrumentation, report writing) | `grok` CLI | has WebSearch/WebFetch, image reading and file writing; deliverable is a file report, which suits delegation — trust the collected file:line facts, re-derive the verdicts (see the investigation profile) |
-
-Core principle: **grok is an executor of tight specs.** It has zero
-conversation context, so the spec must be self-contained (file paths,
-contracts, completion criteria), and must never ask for taste judgments —
-only numeric contracts.
+Loaded on demand from the outsource skill. Everything here is
+field-measured on grok-4.6. Shared implementer rules live in
+references/spec-preamble.md; spec-authoring guidance in
+references/spec-authoring.md.
 
 ## Invocation recipe
 
@@ -383,168 +362,6 @@ while `--leader --leader-socket` clients ran against that socket.
 - Unknown `type` values are ignored. If a CLI upgrade goes silent, read
   the checkpoint file from the preamble.
 
-## Quality bundle (put these sections in every spec)
-
-These are the empirically validated additions that closed most of the
-quality gap against stronger implementer models in a 9-experiment
-blind-judged series (see the repo README):
-
-1. **Contract↔assertion mapping table** — the gate/test file must open with
-   a table mapping every contract clause to at least one assertion; each
-   assertion needs FAIL-first evidence (one line showing it actually fails
-   on a violating fixture). This alone quadrupled self-authored gate depth.
-2. **Quantified depth** — do not write "be thorough". Write: "≥2 assertions
-   per contract clause (one happy path, one violation/boundary)", "coverage
-   table of cases × paths", and "**defend against discovered defects within
-   your own output's scope** — report only what is out of scope".
-3. **Self-review pass** — after finishing, "list 3 defect classes you may
-   have missed; add an assertion for each or justify why not".
-4. **Visual self-verification** (for anything rendered) — grok must open its
-   own screenshots and compare them against the spec's checklist, log every
-   find→fix, and end with a per-axis self-verdict (SHIP/FIX predictions,
-   later compared against an independent blind verdict). **Checklist item #1
-   must always be identity legibility**: "does this read as X? what could it
-   be misread as?" — that one line caught failures numeric gates cannot.
-   Inventing new looks stays banned; the only allowed fixes are convergence
-   toward the numeric contract.
-5. **Logic design principles** (for state machines / serialization / cores):
-   derive-don't-store (derive state from phase and inputs; restoration bugs
-   live in stored state) · re-normalize external input on load (don't
-   validate-then-discard) · a 3-class input defense table
-   (malicious / corrupted / stale-schema, each with a rejection path and an
-   assertion) · adversarial API self-review ("3 ways to misuse my API",
-   each blocked structurally or gated).
-
-## Per-task spec (task.md — appended after the preamble)
-
-The preamble owns shared constraints and the report format. The task spec
-contains only what is unique to this task:
-
-```markdown
-# Task: <one line>
-
-## Files to read before starting (all of them — confirm in the report)
-- <every CLAUDE.md covering the edit-target directories, by absolute path —
-  nested ones are NOT auto-injected (see the warning above)>
-- <the project's contract docs / the modules being touched / prior-art files>
-
-## Background (self-contained — the spec alone must be enough)
-- Target file: <exact path:line>
-- Current behavior / desired behavior
-- <Quote the project pitfalls that apply to THIS task into the body>
-
-## Contract (violations are failures)
-- <pin the contract as values: supported range, behavior when unsupported, boundaries>
-
-## Constraints unique to this task
-- <file boundary: exact writable-path whitelist, enumerated file by file —
-  never "the whole folder"; everything else read-only>
-- <if parallel tracks exist: their broken builds are not your fault — report only>
-
-## Verification commands (completion criteria — paste real output, never hide exit codes behind pipes)
-- [ ] <command and expected output>
-- [ ] <a real end-to-end artifact — build it and open it>
-
-## Last line
-DONE-<track>
-```
-
-### What the lead checks while writing the spec
-
-- **Quote the applicable pitfalls yourself.** The preamble tells grok to go
-  find the trap docs, but what the lead already knows, the lead should quote.
-- **Never pair an explicit file list with a folder-level phrase** ("all 10
-  below, so move the whole folder"). When list and folder disagree, grok
-  takes the wider reading. (Incident: the prose said "all", the list named
-  8, the folder held 15 — 7 unverified documents were moved, one still
-  live.) Enumerate exactly; the preamble makes the list a whitelist, but the
-  lead must not write the ambiguity in the first place.
-- **Never draw the scope fence at an app boundary when the edit target is a
-  shared lib.** "Rewrite `libs/<x>`, don't touch app Y" reads as "ignore app
-  Y" — but Y consumes the lib, and its regressions ship silently (two PRs
-  blocked this way: a scroll-triggered re-download regression and an
-  eviction-contract hole, both in the fenced-out app, both green on tests).
-  Write the fence as **"don't edit Y's files; census Y as a consumer and
-  report what it loses"**, and list the consumers you already know of in
-  the spec.
-- **Never order an unconditional "delete the dead code".** The lead's belief
-  that code is dead is a hypothesis, not a fact — phrase it as "delete only
-  with repo-wide consumer grep attached as evidence; otherwise leave it and
-  report". (A "dead" URL-TTL cache ordered deleted was live on another path.)
-- **Green is a necessary completion criterion, never a sufficient one.** All
-  8 blocking findings across 5 consecutive CHANGES_REQUESTED PRs happened
-  with tests and typecheck fully green — the defect classes (out-of-scope
-  consumer regressions, dropped guards, duplicated helpers, broken
-  references) live outside what green measures. Demand the preamble's report
-  tables (consumer × lost behavior; options/guards kept-vs-dropped) and the
-  numeric link check for moves as completion criteria in their own right.
-- **Never put 3+ independent jobs in one spec.** Defect rates rise with spec
-  length; split boundaries into parallel tracks instead.
-- **Put a real artifact in the completion criteria.** Unit tests alone cover
-  only pure functions; force a snapshot/roundtrip/`--help` execution and the
-  integration defects surface immediately.
-- **Fake-server coverage ≠ the real system.** If credentials exist, the lead
-  runs one real pass; if not, mark "unverified" and run it when they appear.
-  Mix localized/non-ASCII values into fixtures on purpose.
-- **When secrets are involved, demand a whitelist implementation** plus a
-  test that fails on unclassified fields — blacklists leak future fields.
-
-## What the lead always does
-
-1. **grok "done" ≠ done.** The lead reads `git diff` directly and re-runs the
-   affected gates under its own ownership.
-2. **Anything visual gets one blind vision verdict before commit** (a fresh
-   judge each round; give it numeric context first, narrow the question, and
-   include a "do not judge" list for things other tracks are still fixing).
-   If the verdict says FIX, translate the prescription into numbers and
-   resume the same grok session with `-r <SID>`.
-3. **Never mix look-core changes with UI/mechanical work** in one spec or
-   one commit.
-4. Confirm the completion-criteria output in the log; if missing, resume the
-   same session and demand it.
-5. Parallelize grok instances only when file boundaries do not overlap.
-
-### Review checklist (where defects actually leak)
-
-grok reports are largely honest — the problem is what the report does *not*
-say. **Review the `git diff`, not the report**: in one 3-delegation sample,
-2 of 3 real defects (scope overrun, a repointed skill link) read as normal
-in the report and were visible only in the diff. Verified leak points, in
-order:
-
-1. **grep for newly invented mapping/constant tables and duplicated
-   helpers** — the data often already has an equivalent field, and the repo
-   often already has the helper (byte-identical `isCloudFrontGlobalResourceUrl`
-   and `formatBytes` copies both shipped green). When a near-copy of a
-   sibling implementation appears, diff it against the **latest** sibling
-   for dropped guards — a third drag-panel copy was blocked for missing
-   exactly the mount-clamp guard its predecessors had.
-2. **Compare against equivalent implementations on other surfaces** (web/TUI/
-   CLI parity).
-3. **Execute user-facing text yourself** (`--help`, error strings) and check
-   it against the code — invented copy passes tests.
-4. **For refactors, ask "what was lost"** — ordering, caches, fallbacks,
-   shortcuts. A honest comment acknowledging a regression is still a
-   regression.
-5. **Read changed test assertions in the diff** — a bumped constant means a
-   contract was rewritten; demand the original contract.
-6. **Check new imports** for inverted dependency directions.
-7. **Re-run secret scanners *after* committing** new files — `git ls-files`
-   based scanners skip untracked files, which looks like a pass.
-8. **For conditional features, verify the disabled path is unchanged** —
-   hot-path costs don't show up in tests.
-9. **Read test wait conditions in the diff.** A `waitFor` on anything other
-   than the asserted state is a proxy wait — the test passes while proving
-   nothing, and the report shows only PASS. Test PASS means "it ran", not
-   "it's right".
-10. **After move/rename tasks, grep reference integrity in both directions
-    yourself** (links *out of* moved files at their new depth, links *into*
-    the old paths), and treat any edit that repointed `.claude/**`/skill
-    links into an archive as a red flag, not a fix.
-
-Fix small precision defects yourself on the spot; re-delegate only repeated
-patterns or large volumes.
-
 ## Image generation (built-in `image_gen` / `image_edit`)
 
 Headless grok CLI sessions have image generation built in — the `image_gen`
@@ -604,12 +421,6 @@ the notable subset — read the SKILL.md at that path for details:
 | `resume-claude` / `resume-codex` / `resume-cursor` | Continue from another agent's recent session — lets grok pick up a Claude Code session's context |
 | `create-skill` / `create-workflow` / `skill-design-principles` | Author new grok skills/workflows |
 
-## When NOT to delegate to grok
-
-- Problems too exploratory to spec (lead narrows the cause first, then delegates)
-- git / deploy / release actions (lead only)
-- Vision verdicts that contradict instrumentation (escalate to a Claude agent)
-
 ## Operational tips (field-tested)
 
 - Headless grok sometimes finishes a `-p` turn with partial work. Define a
@@ -649,14 +460,3 @@ the notable subset — read the SKILL.md at that path for details:
 - Before diagnosing a hung delegation or lock contention, `pgrep -fl grok` —
   idle sessions left over from earlier rounds are common and easy to
   mistake for your run.
-
-## Local overlay (project/user-specific context)
-
-If `references/local-overlay.md` exists next to this skill, **read it and
-apply it on top of these instructions** — it holds the project- or
-user-specific context that does not belong in the shared skill: role tables,
-project trap docs to quote, scratch-path conventions, model-assignment
-tables, house gate recipes. When merging spec preambles
-(`cat spec-preamble.md [local-overlay.md] task.md`), include it between the
-shared preamble and the task spec. The installer preserves an existing
-overlay on upgrade; this repository never ships one.

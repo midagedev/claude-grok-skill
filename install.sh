@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
-# install.sh — copy the grok-delegate skill into Claude Code's skill directory.
+# install.sh — copy the outsource skill into Claude Code's skill directory.
 #
 # Usage:
-#   ./install.sh            install into ~/.claude/skills/grok-delegate/
-#   ./install.sh --project  install into ./.claude/skills/grok-delegate/ (cwd)
+#   ./install.sh            install into ~/.claude/skills/outsource/
+#   ./install.sh --project  install into ./.claude/skills/outsource/ (cwd)
 #   ./install.sh --print    show the plan without writing
 #   ./install.sh --force    overwrite even if the install was hand-edited
 #
@@ -14,15 +14,15 @@
 # never checksummed.
 set -eu
 
-SRC="$(cd "$(dirname "$0")" && pwd)/skills/grok-delegate"
-DEST="$HOME/.claude/skills/grok-delegate"
+SRC="$(cd "$(dirname "$0")" && pwd)/skills/outsource"
+DEST="$HOME/.claude/skills/outsource"
 MANIFEST=".install-checksums"
 PRINT=0
 FORCE=0
 
 for arg in "$@"; do
   case "$arg" in
-    --project) DEST="$(pwd)/.claude/skills/grok-delegate" ;;
+    --project) DEST="$(pwd)/.claude/skills/outsource" ;;
     --print)   PRINT=1 ;;
     --force)   FORCE=1 ;;
     -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
@@ -81,4 +81,4 @@ fi
     | while IFS= read -r f; do checksum "$f"; done
 ) > "$DEST/$MANIFEST"
 
-echo "installed. In Claude Code, invoke with /grok-delegate (requires an authenticated grok CLI)."
+echo "installed. In Claude Code, invoke with /outsource (backends: grok CLI and/or crush CLI with a z.ai key)."

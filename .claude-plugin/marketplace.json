@@ -1,15 +1,15 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "grok-delegate",
-  "description": "Delegate implementation and vision-verdict work to the local grok CLI as a cheap headless sub-agent, while the lead Claude session stays orchestration-only.",
+  "name": "outsource",
+  "description": "Outsource implementation, investigation and vision-verdict work to third-party model CLIs (grok-4.6, GLM-5.3 via crush) as headless sub-agents, while the lead Claude session stays orchestration-only.",
   "owner": {
     "name": "midagedev",
     "url": "https://github.com/midagedev"
   },
   "plugins": [
     {
-      "name": "grok-delegate",
-      "description": "Field-tested recipes for driving the grok CLI as an implementation sub-agent: invocation flags, quality bundle, git policy profiles, lead review checklist.",
+      "name": "outsource",
+      "description": "Field-tested recipes for driving third-party model CLIs (grok, GLM-5.3) as implementation sub-agents: launchers, git-safety, measured behavior profiles, lead review checklist.",
       "source": "./",
       "category": "productivity"
     }
