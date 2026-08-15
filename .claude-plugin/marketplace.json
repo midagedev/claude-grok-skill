@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "claude-grok-skill",
+  "name": "grok-delegate",
   "description": "Delegate implementation and vision-verdict work to the local grok CLI as a cheap headless sub-agent, while the lead Claude session stays orchestration-only.",
   "owner": {
     "name": "midagedev",

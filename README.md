@@ -13,15 +13,15 @@ It's not a wrapper; it's an operating manual, distilled from a 9-round blind-jud
 From the plugin marketplace:
 
 ```
-/plugin marketplace add midagedev/claude-grok-skill
-/plugin install grok-delegate@claude-grok-skill
+/plugin marketplace add midagedev/grok-delegate
+/plugin install grok-delegate@grok-delegate
 ```
 
 Or with the install script (preferred if you'll use a [local overlay](#local-overlay)):
 
 ```bash
-git clone https://github.com/midagedev/claude-grok-skill
-cd claude-grok-skill
+git clone https://github.com/midagedev/grok-delegate
+cd grok-delegate
 ./install.sh            # user scope: ~/.claude/skills/grok-delegate/
 ./install.sh --project  # project scope: ./.claude/skills/grok-delegate/
 ```
@@ -33,7 +33,7 @@ You'll need [Claude Code](https://claude.com/claude-code) and an authenticated `
 Marketplace installs:
 
 ```
-/plugin marketplace update claude-grok-skill
+/plugin marketplace update grok-delegate
 claude plugin update grok-delegate
 ```
 

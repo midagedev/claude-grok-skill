@@ -13,15 +13,15 @@
 플러그인 마켓플레이스에서:
 
 ```
-/plugin marketplace add midagedev/claude-grok-skill
-/plugin install grok-delegate@claude-grok-skill
+/plugin marketplace add midagedev/grok-delegate
+/plugin install grok-delegate@grok-delegate
 ```
 
 또는 설치 스크립트로 ([로컬 오버레이](#로컬-오버레이)를 쓸 거면 이쪽 권장):
 
 ```bash
-git clone https://github.com/midagedev/claude-grok-skill
-cd claude-grok-skill
+git clone https://github.com/midagedev/grok-delegate
+cd grok-delegate
 ./install.sh            # 사용자 스코프: ~/.claude/skills/grok-delegate/
 ./install.sh --project  # 프로젝트 스코프: ./.claude/skills/grok-delegate/
 ```
@@ -33,7 +33,7 @@ cd claude-grok-skill
 마켓플레이스로 설치했다면:
 
 ```
-/plugin marketplace update claude-grok-skill
+/plugin marketplace update grok-delegate
 claude plugin update grok-delegate
 ```
 

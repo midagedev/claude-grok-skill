@@ -6,8 +6,8 @@
     "name": "midagedev",
     "url": "https://github.com/midagedev"
   },
-  "homepage": "https://github.com/midagedev/claude-grok-skill",
-  "repository": "https://github.com/midagedev/claude-grok-skill",
+  "homepage": "https://github.com/midagedev/grok-delegate",
+  "repository": "https://github.com/midagedev/grok-delegate",
   "license": "MIT",
   "keywords": ["grok", "delegation", "sub-agent", "orchestration", "token-saving"]
 }
