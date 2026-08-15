@@ -24,17 +24,22 @@ conversation context, so the spec must be self-contained (file paths,
 contracts, completion criteria) and must never ask for taste judgments —
 only numeric contracts.
 
-## Backends — pick per task, then read that backend's reference
+## Backends — GLM-5.3 by default, grok when the task needs eyes
 
-| Backend | Runs via | Strengths | Hard limits |
+| Backend | Runs via | Use it for | Hard limits |
 |---|---|---|---|
-| **grok-4.6** | `grok` CLI, headless (`references/grok.md`) | implementation; web research (WebSearch/WebFetch); **vision verdicts** and image reading; image/video generation | verdicts contradicting instrumentation escalate to a Claude agent |
-| **GLM-5.3** | z.ai coding plan, via `bin/glm-run.sh` on either harness — `claude -p` (default) or the `crush` CLI (`references/glm.md`) | implementation, mechanical edits, gate authoring, code investigation; strong disclosure and premise-correction | **cannot see images at all**; style/look/UI-interaction authoring measured weaker — route those elsewhere |
+| **GLM-5.3** — the default | z.ai coding plan, via `bin/outsource-run.sh` on either harness — `claude -p` (default) or the `crush` CLI (`references/glm.md`) | **every spec-able round**: implementation, mechanical edits, gate authoring, code investigation, reports. Strong disclosure and premise-correction | **cannot see images at all**; style/look/UI-interaction authoring measured weaker — route those elsewhere |
+| **grok-4.6** — the exception | `grok` CLI, headless (`references/grok.md`) | what GLM structurally cannot do: **vision verdicts** and image reading, image/video generation, and web research when GLM's harness lacks the tool | verdicts contradicting instrumentation escalate to a Claude agent |
 
 Selection rules:
 
-- Anything that must **look at pixels** (screenshot verdicts, framing,
-  colour) → grok or a Claude agent; never GLM-5.3.
+- **Default to GLM-5.3.** Reach for grok when the task needs eyes (pixels,
+  framing, colour), pixels generated (image/video), or a web tool the GLM
+  harness does not have. "It feels exploratory" is not a reason — narrow the
+  cause first, then delegate (see *When NOT to outsource*).
+- Anything that must **look at pixels** → grok or a Claude agent; never
+  GLM-5.3. This is a capability fact, not a preference: the model reports
+  `supports_attachments: false`.
 - Both backends parallelize: disjoint file whitelists, one worktree and one
   config/session scope per track. Spreading tracks across the two providers —
   and, for GLM, across its two harnesses — multiplies headroom.
@@ -58,15 +63,30 @@ cat <skill-dir>/references/spec-preamble.md \      # shared rules — every clau
 Write the per-task spec from `references/spec-template.md`, and read
 `references/spec-authoring.md` before writing it — the quality bundle and
 the lead-side checks there are where delegated quality is actually won.
+
+**Lint the assembled spec before launching it:**
+
+```bash
+<skill-dir>/bin/spec-lint.sh --root <repo> <scratch>/spec.md
+```
+
+It resolves every `path:line` citation and every path-shaped reference, and
+exits 1 on one that does not exist or a line number past the end of its
+file. Wrong premises are the measured tax on delegation — in one session
+five of them (a nonexistent tool, a nonexistent column, an absent fixture,
+a wrong runner cwd, a wrong manifest path) each cost part of a round. The
+delegate catches them, but only after it has started.
+
 Then invoke the backend exactly as its reference describes:
 
 - grok: `references/grok.md` — flag combo, git-safety profiles, sentinel
   completion proof, vision-verdict recipe, image generation, mid-round
   visibility and intervention.
-- GLM-5.3: `references/glm.md` — `bin/glm-run.sh` launcher (harness picker,
-  isolated config per track, `SESSION <id>` resume), `bin/git-guard.sh`
-  PreToolUse hook (works on both harnesses), z.ai model-mapping trap,
-  measured behavior profile.
+- GLM-5.3: `references/glm.md` — `bin/outsource-run.sh` launcher (provider
+  table, harness picker, isolated config per track, `SESSION <id>` resume,
+  `--require-quota` pre-flight gate, model-identity assertion, `<log>.rc`
+  sentinel), `bin/git-guard.sh` PreToolUse hook (works on both harnesses),
+  z.ai model-mapping trap, measured behavior profile.
 
 ## What the lead always does (backend-independent)
 
@@ -75,7 +95,11 @@ Then invoke the backend exactly as its reference describes:
    spec's completion marker (`DONE-<track>`), never by exit codes or
    harness lifecycle notifications.
 2. **Re-run the suite it called green from cold** and compare the test
-   count with CI's — a differing count is a failed verification.
+   count with CI's — a differing count is a failed verification. **Never
+   pipe a gate through `tail`/`head`**: the pipeline's exit status becomes
+   the pager's, and a hard failure reads as green (measured: a `vitest run`
+   that exited 1 with "No test files found" looked clean through `| tail`).
+   Capture the full output to a file and grep that.
 3. **Ask where the cause was closed.** A commit message or report paragraph
    is not a recurrence layer; demand the gate/test/config `file:line`.
 4. **Look for artifact/code divergence** the change introduced, and check

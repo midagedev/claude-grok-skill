@@ -6,12 +6,14 @@
 
 A Claude Code skill that runs **third-party model CLIs as headless implementation sub-agents**. The lead Claude session keeps the work where judgment matters — specs, diff review, gates, commits — and outsources implementation, mechanical edits, investigation, and even screenshot verdicts to models whose tokens are effectively free on a subscription:
 
-| Backend | Runs via | Good at | Hard limit |
+| Backend | Runs via | Use it for | Hard limit |
 |---|---|---|---|
-| **grok-4.6** | `grok` CLI | implementation, web research, **vision verdicts**, image/video generation | escalate to Claude when a verdict contradicts instrumentation |
-| **GLM-5.3** | z.ai coding plan, driven by `bin/glm-run.sh` on **either harness** — headless Claude Code (`claude -p`, default) or the `crush` CLI | implementation, gate authoring, code investigation, honest disclosure | **cannot see images**; style/UI-interaction authoring measured weaker |
+| **GLM-5.3** — the default | z.ai coding plan, driven by `bin/outsource-run.sh` on **either harness** — headless Claude Code (`claude -p`, default) or the `crush` CLI | every spec-able round: implementation, gate authoring, code investigation; honest disclosure | **cannot see images**; style/UI-interaction authoring measured weaker |
+| **grok-4.6** — the exception | `grok` CLI | what GLM structurally can't do: **vision verdicts**, image/video generation, web research | escalate to Claude when a verdict contradicts instrumentation |
 
 It's not a wrapper; it's an operating manual with receipts — two measured experiment series, one per backend, are [below](#does-it-actually-work).
+
+Adding a provider is one table row, not a code branch: base URL, credential source, default model, vision capability.
 
 ## Install
 
@@ -31,7 +33,7 @@ cd outsource
 ./install.sh --project  # project scope: ./.claude/skills/outsource/
 ```
 
-You'll need [Claude Code](https://claude.com/claude-code) plus at least one backend: an authenticated `grok` CLI, and/or a z.ai coding-plan key in your `crush` config (the GLM launcher reads the key from there and runs it on headless Claude Code by default — the `crush` CLI itself is only needed for `--harness crush`).
+You'll need [Claude Code](https://claude.com/claude-code) plus at least one backend: an authenticated `grok` CLI, and/or a z.ai coding-plan key in your `crush` config (the launcher reads the key from there and runs it on headless Claude Code by default — the `crush` CLI itself is only needed for `--harness crush`). Credentials are read at launch time and ride curl's stdin or the process environment; nothing this skill writes ever contains a key.
 
 ## Updating
 
@@ -42,10 +44,49 @@ Marketplace: `/plugin marketplace update outsource` then `claude plugin update o
 Say **"run this via grok"** or **"run this via glm/crush"** in any Claude Code session, or invoke `/outsource`. Claude then:
 
 1. writes a **self-contained spec** — file paths, numeric contracts, verification commands — from the bundled preamble + template (`references/spec-authoring.md` holds the quality bundle that closed the measured quality gap),
-2. launches the backend **headless in the background** with its field-tested recipe (`references/grok.md` / `references/glm.md`) — git safety enforced by deny-profiles on grok and by a `PreToolUse` command-string guard on the GLM harnesses (29 regression cases, both call conventions),
-3. **reviews the result like a lead**: reads the diff itself, re-runs the gates cold under its own ownership, and walks an 11-point checklist of the places delegated reports actually leak.
+2. **lints the spec and checks the plan's quota** before spending anything ([below](#guardrails-before-and-after-the-round)),
+3. launches the backend **headless in the background** with its field-tested recipe (`references/grok.md` / `references/glm.md`),
+4. **reviews the result like a lead**: reads the diff itself, re-runs the gates cold under its own ownership, and walks an 11-point checklist of the places delegated reports actually leak.
 
 The core principle: **the delegate is an executor of tight specs.** Zero conversation context, so every delegation stands alone — and never asks for taste judgments, only numeric contracts.
+
+## Guardrails, before and after the round
+
+A delegated round fails in ways a human round doesn't: the spec cites a file that moved, the plan runs out of credit halfway, the endpoint quietly answers with a different model. Each of those is now a check with an exit code rather than a paragraph of advice.
+
+**Before launch**
+
+```bash
+bin/spec-lint.sh --root <repo> <scratch>/spec.md     # 0 clean · 1 findings
+bin/outsource-run.sh --require-quota 15 …            # 66 if the plan is too low
+```
+
+- **`spec-lint.sh`** resolves every `path:line` citation and path-shaped reference in the spec and fails on one that doesn't exist or a line past the end of its file. In one measured session five wrong premises (a nonexistent tool, a nonexistent column, an absent fixture, a wrong runner cwd, a wrong manifest path) each burned part of a round before the delegate caught them. A reference that resolves under any plausible base is not flagged, and templates (`<placeholder>`, `$VAR`, globs, URLs) never are — a linter people ignore is worse than none.
+- **`--require-quota N`** refuses to start a round the plan can't finish, keyed on the **tightest** window rather than the shortest one (measured: the weekly window sat at 81.7% remaining while the 5-hour sat at 83.8% — the shortest is not the binding one). It fails closed: a gate that can't be evaluated is not a gate that passed.
+- The **vision guard** refuses (exit 65) when a spec references an image file and the provider's table row says it can't see images. Capability comes from the table, never a provider-name test at the call site.
+- The **git guard** is a `PreToolUse` hook that parses the actual command string — `git -C … commit`, `env … git push`, `sudo git …`, and chained mutations all blocked; read-only git deliberately open. It speaks both hook conventions, so the same file guards the crush and Claude Code harnesses.
+
+**After the round**
+
+- **Model-identity assertion** (exit 70). z.ai maps an unqualified `claude-*` request onto its plan default, so a round can silently run a model you didn't ask for. The launcher reads the model that answered from the per-turn `message.model` in the session transcript — *not* from `modelUsage`, which was measured to echo the **requested** id and therefore can never prove a match. No transcript means "unverifiable", which fails too.
+- **A completion sentinel** `<log>.rc` with `rc`, `finished`, `harness`, `provider`, `model_requested`, `model_actual`, `session`, `quota_spent`. The harness's own lifecycle is not completion proof; this file is.
+- **The round's real price**, as a credit delta measured against the plan's own quota API before and after. The `total_cost_usd` in the log is an Anthropic-priced estimate and is wrong for every provider here.
+
+```
+outsource: this round spent 5h=+9 1w=+9 on provider 'zai'
+```
+
+`bin/quota.sh` also stands alone, for either subscription backend:
+
+```
+$ quota.sh
+z.ai coding plan: level max — GLM Coding Max (status VALID, valid 2026-08-15~09-15)
+5h window: 6692/28000 consumed, 21307 remaining, 23% used / 76.1% left, resets at 12:24 (in 3h 46m)  <- tightest
+1w window: 27758/140000 consumed, 112241 remaining, 19% used / 80.2% left, resets at 17:52 (in 153h 14m)
+
+$ quota.sh --provider grok
+1w window: exact counts not exposed by this API, 98.0% used / 2.0% left, resets at 15:13 (in 6h 36m)
+```
 
 ## The quality bundle
 
@@ -126,10 +167,13 @@ Where it settled (our production assignment table):
 | `references/glm-preamble.md` | GLM runtime delta (no images, hooks not flags, evidence rules §6–§11) |
 | `references/spec-authoring.md` | The quality bundle, the per-task template walkthrough, lead-side spec checks |
 | `references/spec-template.md` | Per-task spec skeleton: contracts, depth requirements, verification commands |
-| `bin/glm-run.sh` · `bin/git-guard.sh` | GLM launcher (`--harness claude-code\|crush`, isolated config per track, session resume) and the git-ban hook, which works on both harnesses |
+| `bin/outsource-run.sh` | The launcher: provider table, harness picker (`--harness claude-code\|crush`), isolated config per track, session resume, vision/quota guards, model-identity assertion, completion sentinel |
+| `bin/git-guard.sh` | The git-ban `PreToolUse` hook, one file for both harnesses' calling conventions (29 regression cases) |
+| `bin/spec-lint.sh` | Pre-launch spec check: unresolvable paths and out-of-range `path:line` citations |
+| `bin/quota.sh` | Plan quota for `zai` and `grok`, human or `--json`, with `--require-window` as a gate |
 | `scripts/grok-progress.py` · `scripts/grok-round-status.py` | Compress a grok NDJSON stream into one-line progress events; judge round state by sentinel |
 
-Safety default on both backends: repository-state git stays with the lead — grok via enumerated deny-profiles, GLM via a hook that parses the actual command string (`git -C … commit`, `env … git push`, `sudo git …` and chained mutations all blocked; read-only git deliberately open).
+Safety default on both backends: repository-state git stays with the lead — grok via enumerated deny-profiles, GLM via the command-string hook above.
 
 ## Local overlay
 
@@ -140,7 +184,9 @@ Project- or user-specific context (role tables, default-backend choice, house ga
 - Exploratory problems that can't be specced aren't delegation material — the lead narrows first.
 - Design-weight logic didn't fully close even with bundle v3; write those with Claude, review with a backend.
 - GLM-5.3 cannot read images, full stop — and (measured) it says so instead of guessing.
-- z.ai's Anthropic-compatible endpoint silently maps an unqualified `claude-*` request onto its plan default (measured: glm-4.7), so the launcher pins the model — check `modelUsage` in the log to see which model actually answered. The `total_cost_usd` the Claude Code harness prints is Anthropic-priced, not what the plan charges.
+- z.ai's Anthropic-compatible endpoint silently maps an unqualified `claude-*` request onto its plan default (measured: glm-4.7). The launcher pins the model and asserts what answered, but the assertion needs the session transcript — `modelUsage` in the log echoes the *requested* id and proves nothing.
+- Plan quota is readable for the two subscription backends only. Claude and pay-per-token API keys expose no window to check, so there is nothing to gate on there.
+- Grok exposes a percentage but no credit counts, so a grok round's price is a percentage delta, not a number of credits.
 - Reports are largely honest on both backends; the risk is what they *don't* say — hence the lead review checklist.
 - Claude Code only for now. The SKILL.md format is portable, but we publish only what we've verified end-to-end.
 

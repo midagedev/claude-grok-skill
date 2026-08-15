@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.7.0 — 2026-08-16 — guardrails with exit codes
+
+Renamed `bin/glm-run.sh` → **`bin/outsource-run.sh`**: the launcher is no
+longer GLM-specific. All references updated; the flag surface is unchanged
+apart from the additions below.
+
+- **Provider table** replaces the hardcoded z.ai constants. A provider is one
+  row — base URL, credential source, default model, vision capability — read
+  by both harnesses. `--provider zai|xai` (or `OUTSOURCE_PROVIDER`); adding
+  one is a row, not a code branch. `ZAI_ANTHROPIC_BASE` still works for zai.
+- **Model-identity assertion (exit 70).** A round that silently ran the wrong
+  model is a failed round. Correction to 0.6.0's claim: `modelUsage` in the
+  JSON log echoes the **requested** id and cannot prove a match (measured — a
+  run that asked for `claude-opus-5` and was answered by glm-4.7 still logged
+  `modelUsage {"claude-opus-5": …}`). The assertion now reads the per-turn
+  `message.model` from the session transcript; no transcript means
+  *unverifiable*, which also fails.
+- **`bin/quota.sh`** — plan quota for the subscription backends, human or
+  `--json`, with `--require-window N%` as a gate (exit 3).
+  - `zai`: both rolling windows with real credit counts, plus plan identity.
+    The console endpoint answers a bad credential with **HTTP 200** and
+    `success:false`, so the body decides success, not the status line.
+  - `grok`: the Grok CLI's billing proxy, authenticated with the OAuth token
+    the CLI stores. Percent only — xAI exposes no counts. Carries three
+    measured traps: `creditUsagePercent` is omitted when it is exactly zero
+    (resolved via matching billing bounds), an expired token means "run grok
+    once", not "log in again", and unified-billing accounts expose only a
+    monthly budget in the default billing view.
+  - The gate keys on the **tightest** window, not the shortest — measured, the
+    weekly sat at 81.7% remaining while the 5-hour sat at 83.8%.
+- **`--require-quota N`** on the launcher refuses to start a round the plan
+  cannot finish (exit 66), and fails closed when it cannot be evaluated.
+- **The round's real price.** Every logged round is bracketed with a quota
+  snapshot and reports the credit delta (`5h=+9 1w=+9`) — the log's
+  `total_cost_usd` is Anthropic-priced and wrong for every provider here.
+- **Completion sentinel `<log>.rc`** for both harnesses: `rc`, `finished`,
+  `harness`, `provider`, `model_requested`, `model_actual`, `session`,
+  `quota_spent`. The harness's lifecycle is not completion proof.
+- **`bin/spec-lint.sh`** — pre-launch spec check for unresolvable paths and
+  out-of-range `path:line` citations, the class behind five measured wrong
+  premises in one session. Bare filenames are only checked when they carry a
+  `:line` citation, and a reference resolving under any plausible base is not
+  flagged: at the first cut it produced 30+ findings on this repo's own docs
+  with zero real defects, and a linter people ignore is worse than none.
+- **Vision guard (exit 65)** when a spec references an image file and the
+  provider's row says it cannot see images. Driven by the table, never by a
+  provider-name test at the call site.
+- Lead checklist: never pipe a gate through `tail`/`head` — the pipeline's
+  exit status becomes the pager's, and a hard failure reads as green
+  (measured: a `vitest run` that exited 1 looked clean through `| tail`).
+
 ## 0.6.0 — 2026-08-16 — GLM on two harnesses
 
 - `bin/glm-run.sh` gains `--harness claude-code|crush`. **claude-code is now

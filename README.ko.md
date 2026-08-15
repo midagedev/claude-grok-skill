@@ -6,12 +6,14 @@
 
 **타사 모델 CLI들을 헤드리스 구현 서브에이전트로** 돌리는 Claude Code 스킬입니다. 리드 Claude 세션은 판단이 필요한 일(스펙, diff 리뷰, 게이트, 커밋)만 잡고, 구현·기계적 수정·조사·스크린샷 판정까지 구독 요금제에서 사실상 공짜인 모델 토큰으로 하청을 줍니다:
 
-| 백엔드 | 구동 | 잘하는 것 | 하드 제약 |
+| 백엔드 | 구동 | 쓰는 자리 | 하드 제약 |
 |---|---|---|---|
-| **grok-4.6** | `grok` CLI | 구현, 웹 리서치, **비전 판정**, 이미지/비디오 생성 | 판정이 계측과 어긋나면 Claude로 에스컬레이션 |
-| **GLM-5.3** | z.ai 코딩플랜을 `bin/glm-run.sh`가 **두 하네스** 중 하나로 구동 — 헤드리스 Claude Code(`claude -p`, 기본) 또는 `crush` CLI | 구현, 게이트 저작, 코드 조사, 정직한 공개 | **이미지를 못 봄**; 스타일/UI 상호작용 저작은 실측 열세 |
+| **GLM-5.3** — 기본값 | z.ai 코딩플랜을 `bin/outsource-run.sh`가 **두 하네스** 중 하나로 구동 — 헤드리스 Claude Code(`claude -p`, 기본) 또는 `crush` CLI | 스펙으로 쓸 수 있는 모든 라운드: 구현, 게이트 저작, 코드 조사, 정직한 공개 | **이미지를 못 봄**; 스타일/UI 상호작용 저작은 실측 열세 |
+| **grok-4.6** — 예외 | `grok` CLI | GLM이 구조적으로 못 하는 것: **비전 판정**, 이미지/비디오 생성, 웹 리서치 | 판정이 계측과 어긋나면 Claude로 에스컬레이션 |
 
 래퍼가 아니라 **영수증이 붙은 운영 매뉴얼**입니다 — 백엔드별로 하나씩, 실측 실험 두 시리즈가 [아래](#실제로-되나)에 있습니다.
+
+프로바이더 추가는 코드 분기가 아니라 **테이블 한 줄**입니다 — base URL, 크레덴셜 출처, 기본 모델, 비전 가능 여부.
 
 ## 설치
 
@@ -31,7 +33,7 @@ cd outsource
 ./install.sh --project  # 프로젝트 스코프: ./.claude/skills/outsource/
 ```
 
-[Claude Code](https://claude.com/claude-code)와 백엔드 최소 하나가 필요합니다 — 인증된 `grok` CLI, 그리고/또는 `crush` 설정에 들어 있는 z.ai 코딩플랜 키(GLM 런처가 키를 거기서 읽고 기본은 헤드리스 Claude Code로 돌립니다 — `crush` CLI 자체는 `--harness crush`일 때만 필요).
+[Claude Code](https://claude.com/claude-code)와 백엔드 최소 하나가 필요합니다 — 인증된 `grok` CLI, 그리고/또는 `crush` 설정에 들어 있는 z.ai 코딩플랜 키(런처가 키를 거기서 읽고 기본은 헤드리스 Claude Code로 돌립니다 — `crush` CLI 자체는 `--harness crush`일 때만 필요). 크레덴셜은 발사 시점에 읽어 curl의 stdin이나 프로세스 환경으로만 넘어갑니다 — 이 스킬이 만드는 파일에는 키가 들어가지 않습니다.
 
 ## 업데이트
 
@@ -42,10 +44,49 @@ cd outsource
 아무 Claude Code 세션에서 **"grok으로 돌려"** 또는 **"glm/crush로 돌려"** 라고 말하거나 `/outsource`를 호출하면, Claude가:
 
 1. 번들된 preamble + 템플릿으로 **자기완결 스펙**(파일 경로, 수치 계약, 검증 명령)을 쓰고 (`references/spec-authoring.md`의 품질 번들이 실측으로 품질 격차를 닫은 장치들입니다),
-2. 백엔드를 **백그라운드 헤드리스**로 실전 검증된 레시피(`references/grok.md` / `references/glm.md`)대로 발사하고 — git 안전은 grok은 deny 프로파일, GLM 하네스들은 명령 문자열을 읽는 `PreToolUse` 가드(회귀 29케이스, 두 호출 규약 모두)로 강제 —,
-3. **리드답게 검수합니다**: diff를 직접 읽고, 게이트를 콜드로 재실행하고, 위임 보고서가 실제로 새는 지점 11개 체크리스트를 돕니다.
+2. 돈을 쓰기 전에 **스펙을 린트하고 플랜 쿼터를 확인**하고 ([아래](#가드레일-라운드-전과-후)),
+3. 백엔드를 **백그라운드 헤드리스**로 실전 검증된 레시피(`references/grok.md` / `references/glm.md`)대로 발사하고,
+4. **리드답게 검수합니다**: diff를 직접 읽고, 게이트를 콜드로 재실행하고, 위임 보고서가 실제로 새는 지점 11개 체크리스트를 돕니다.
 
 핵심 원칙: **위임받는 쪽은 촘촘한 스펙의 실행자입니다.** 대화 컨텍스트가 없으니 모든 위임은 홀로 서야 하고, 취향 판단은 절대 시키지 않습니다 — 수치 계약만.
+
+## 가드레일: 라운드 전과 후
+
+위임 라운드는 사람이 하는 라운드와 다른 방식으로 실패합니다 — 스펙이 옮겨진 파일을 인용하거나, 플랜 크레딧이 중간에 떨어지거나, 엔드포인트가 조용히 다른 모델로 답하거나. 이제 각각이 조언 문단이 아니라 **종료 코드가 붙은 검사**입니다.
+
+**발사 전**
+
+```bash
+bin/spec-lint.sh --root <repo> <scratch>/spec.md     # 0 깨끗 · 1 발견
+bin/outsource-run.sh --require-quota 15 …            # 플랜이 부족하면 66
+```
+
+- **`spec-lint.sh`** — 스펙의 모든 `path:line` 인용과 경로꼴 참조를 해석해서, 존재하지 않는 경로나 파일 끝을 넘는 줄 번호에서 실패합니다. 실측된 한 세션에서 잘못된 전제 다섯 개(없는 툴, 없는 컬럼, 없는 픽스처, 틀린 실행 디렉터리, 틀린 매니페스트 경로)가 각각 라운드의 일부를 태웠습니다 — 위임받은 쪽이 잡긴 하지만, 이미 시작한 뒤입니다. 그럴듯한 베이스 어디에서든 해석되는 참조는 잡지 않고, 템플릿(`<placeholder>`, `$VAR`, glob, URL)도 잡지 않습니다. **무시당하는 린터는 없느니만 못하니까요.**
+- **`--require-quota N`** — 플랜이 끝낼 수 없는 라운드를 아예 시작하지 않습니다. 기준은 **가장 짧은 창이 아니라 가장 빡빡한 창**입니다(실측: 주간 창이 81.7% 남았을 때 5시간 창은 83.8%였습니다 — 짧은 쪽이 구속 조건이 아닙니다). 그리고 **닫히는 쪽으로 실패**합니다 — 평가할 수 없는 게이트는 통과한 게이트가 아닙니다.
+- **비전 가드** — 스펙이 이미지 파일을 참조하는데 프로바이더 테이블 행이 "이미지를 못 봄"이면 거부합니다(exit 65). 능력 판단은 테이블에서 오지, 호출 지점의 프로바이더 이름 비교에서 오지 않습니다.
+- **git 가드** — 실제 명령 문자열을 파싱하는 `PreToolUse` 훅입니다. `git -C … commit`, `env … git push`, `sudo git …`, 체인된 변경까지 모두 차단하고 읽기 전용 git은 의도적으로 열어 둡니다. 두 훅 규약을 모두 말하므로 crush와 Claude Code 하네스를 파일 하나가 지킵니다.
+
+**라운드 후**
+
+- **모델 정체성 단언**(exit 70). z.ai는 모델을 안 박은 `claude-*` 요청을 플랜 기본값으로 조용히 매핑하므로, 요청하지 않은 모델로 라운드가 돌 수 있습니다. 런처는 세션 트랜스크립트의 턴별 `message.model`에서 실제로 답한 모델을 읽습니다 — `modelUsage`가 **아닙니다**. 그건 실측 결과 **요청한 id를 되비추기만** 해서 일치를 증명할 수 없습니다. 트랜스크립트가 없으면 "검증 불가"이고, 그것도 실패입니다.
+- **완료 센티넬** `<log>.rc` — `rc`, `finished`, `harness`, `provider`, `model_requested`, `model_actual`, `session`, `quota_spent`. 하네스의 수명 신호는 완료 증거가 아닙니다. 이 파일이 증거입니다.
+- **그 라운드의 진짜 값** — 플랜 자체의 쿼터 API를 라운드 전후로 재서 얻은 크레딧 차이입니다. 로그의 `total_cost_usd`는 Anthropic 단가 추정이고 여기 있는 어느 프로바이더에도 맞지 않습니다.
+
+```
+outsource: this round spent 5h=+9 1w=+9 on provider 'zai'
+```
+
+`bin/quota.sh`는 단독으로도 씁니다 — 구독형 백엔드 둘 다:
+
+```
+$ quota.sh
+z.ai coding plan: level max — GLM Coding Max (status VALID, valid 2026-08-15~09-15)
+5h window: 6692/28000 consumed, 21307 remaining, 23% used / 76.1% left, resets at 12:24 (in 3h 46m)  <- tightest
+1w window: 27758/140000 consumed, 112241 remaining, 19% used / 80.2% left, resets at 17:52 (in 153h 14m)
+
+$ quota.sh --provider grok
+1w window: exact counts not exposed by this API, 98.0% used / 2.0% left, resets at 15:13 (in 6h 36m)
+```
 
 ## 품질 번들
 
@@ -126,7 +167,10 @@ E3의 교훈: grok은 체크리스트 6축 전부 SHIP을 자평하고도 졌습
 | `references/glm-preamble.md` | GLM 런타임 델타 (이미지 불가, 플래그 아닌 훅, 증거 규칙 §6–§11) |
 | `references/spec-authoring.md` | 품질 번들, 태스크 템플릿 해설, 리드의 스펙 작성 체크 |
 | `references/spec-template.md` | 태스크 스펙 골격: 계약, 깊이 요건, 검증 명령 |
-| `bin/glm-run.sh` · `bin/git-guard.sh` | GLM 런처(`--harness claude-code\|crush`, 트랙별 격리 config, 세션 재개)와 두 하네스 모두에서 동작하는 git 금지 훅 |
+| `bin/outsource-run.sh` | 런처: 프로바이더 테이블, 하네스 선택(`--harness claude-code\|crush`), 트랙별 격리 config, 세션 재개, 비전·쿼터 가드, 모델 정체성 단언, 완료 센티넬 |
+| `bin/git-guard.sh` | git 금지 `PreToolUse` 훅 — 두 하네스의 호출 규약을 파일 하나가 처리(회귀 29케이스) |
+| `bin/spec-lint.sh` | 발사 전 스펙 검사: 해석되지 않는 경로와 범위를 넘는 `path:line` 인용 |
+| `bin/quota.sh` | `zai`·`grok` 플랜 쿼터. 사람용 또는 `--json`, `--require-window`로 게이트화 |
 | `scripts/grok-progress.py` · `scripts/grok-round-status.py` | grok NDJSON 스트림을 한 줄 진행 이벤트로 압축; 센티널로 라운드 상태 판정 |
 
 양 백엔드 공통 안전 기본값: 저장소 상태 git은 리드 전용 — grok은 열거형 deny 프로파일, GLM은 명령 문자열을 파싱하는 훅(`git -C … commit`, `env … git push`, `sudo git …`, 체이닝 전부 차단; 읽기 전용 git은 일부러 개방).
@@ -140,7 +184,9 @@ E3의 교훈: grok은 체크리스트 6축 전부 SHIP을 자평하고도 졌습
 - 스펙으로 못 쓰는 탐색형 문제는 위임 대상이 아닙니다 — 리드가 먼저 좁힙니다.
 - 설계 하중이 큰 로직은 번들 v3로도 완전히 닫히지 않았습니다; Claude로 쓰고 백엔드로 리뷰하세요.
 - GLM-5.3은 이미지를 못 봅니다, 예외 없이 — 그리고 (실측) 추측하는 대신 못 본다고 말합니다.
-- z.ai의 Anthropic 호환 엔드포인트는 모델명을 안 박으면 플랜 기본값(실측: glm-4.7)으로 조용히 매핑합니다. 그래서 런처가 모델을 고정하고, 실제로 어느 모델이 답했는지는 로그의 `modelUsage`로 확인합니다. Claude Code 하네스가 찍는 `total_cost_usd`는 Anthropic 단가 추정이지 플랜 청구액이 아닙니다.
+- z.ai의 Anthropic 호환 엔드포인트는 모델명을 안 박으면 플랜 기본값(실측: glm-4.7)으로 조용히 매핑합니다. 런처가 모델을 고정하고 무엇이 답했는지 단언하지만, 그 단언에는 세션 트랜스크립트가 필요합니다 — 로그의 `modelUsage`는 *요청한* id를 되비출 뿐 아무것도 증명하지 못합니다.
+- 플랜 쿼터는 **구독형 백엔드 둘**에서만 읽힙니다. Claude와 종량제 API 키는 확인할 창 자체가 없어서 게이트할 대상이 없습니다.
+- grok은 퍼센트만 노출하고 크레딧 개수를 주지 않으므로, grok 라운드의 값은 크레딧 수가 아니라 퍼센트 차이입니다.
 - 보고서는 양쪽 다 대체로 정직합니다; 위험은 *말하지 않는 것*에 있습니다 — 리드 검수 체크리스트가 있는 이유.
 - 아직 Claude Code 전용입니다. SKILL.md 형식은 이식 가능하지만, 끝까지 검증한 것만 공개합니다.
 

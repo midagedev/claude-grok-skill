@@ -1,7 +1,7 @@
 <!--
 GLM-runtime delta. The shared implementer rules (investigate first, no
 duplicate helpers, FAIL-first, self-review, report format) have a single
-owner: outsource/references/spec-preamble.md — prepend it first:
+owner: references/spec-preamble.md — prepend it first:
 
   cat ~/.claude/skills/outsource/references/spec-preamble.md \
       ~/.claude/skills/outsource/references/glm-preamble.md \

@@ -1,7 +1,7 @@
 # GLM-5.3 backend — z.ai coding plan, on either harness
 
 The model is the point; **the harness is just how it is driven headlessly**,
-and `bin/glm-run.sh --harness` picks one. Division of labor is unchanged:
+and `bin/outsource-run.sh --harness` picks one. Division of labor is unchanged:
 the lead writes specs, reviews diffs, runs gates, commits; GLM-5.3 burns the
 implementation tokens, which are close to free on a z.ai coding plan.
 
@@ -19,14 +19,26 @@ hook JSON on stdin (claude-code).
 `claude-opus-5` comes back as **glm-4.7** (the plan default), while
 `glm-4.6`/`glm-5.3` are honoured verbatim. So the harness must pin
 `ANTHROPIC_MODEL` — otherwise you believe you ran one model and actually ran
-another. Verify per round: the JSON log's `modelUsage` key is the model that
-really answered.
+another.
+
+The launcher now asserts this per round and **fails the round with exit 70**
+on a mismatch, even when the run itself succeeded. Where the evidence comes
+from matters: `modelUsage` in the JSON log was measured to echo the
+**requested** id (a run that asked for `claude-opus-5` and was answered by
+glm-4.7 still logged `modelUsage {"claude-opus-5": …}`), so a match there
+proves nothing. The model that actually answered is the per-turn
+`message.model` in the session transcript under the isolated config dir.
+No transcript means *unverifiable*, which also exits 70 — a `modelUsage`
+match is never accepted as a pass.
 
 Also measured: `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` are genuinely
 honoured by `claude -p` (an invalid token 401s, so a green run really did go
 to z.ai, not to your own subscription), `CLAUDE_CONFIG_DIR` isolates the run
 from the user's own Claude Code, and `total_cost_usd` in the log is Claude
-Code's Anthropic-priced estimate — **not** what the z.ai plan charges.
+Code's Anthropic-priced estimate — **not** what the z.ai plan charges. For
+the real figure, the launcher brackets every logged round with
+`bin/quota.sh` and reports the credit delta (`5h=+9 1w=+9`), which also
+lands in the `<log>.rc` sentinel as `quota_spent`.
 
 The shared implementer preamble (`references/spec-preamble.md`) carries the
 backend-agnostic rules; `references/glm-preamble.md` is the GLM-runtime
@@ -46,7 +58,7 @@ cat ~/.claude/skills/outsource/references/spec-preamble.md \
     ~/.claude/skills/outsource/references/glm-preamble.md \
     $SP/task.md > $SP/spec.md
 
-~/.claude/skills/outsource/bin/glm-run.sh \
+~/.claude/skills/outsource/bin/outsource-run.sh \
   --cwd /absolute/path/to/worktree --spec $SP/spec.md \
   --config-dir $SP/glm-cfg-<track> --log $SP/glm-<track>.log
 # add --harness crush to run the same spec on the other harness
@@ -60,9 +72,20 @@ summarized spec is usually better).
 Flags: `--harness claude-code|crush` (default claude-code, or
 `OUTSOURCE_HARNESS`); `--model` — bare id on claude-code (`glm-5.3`),
 `provider/id` on crush (`zai/glm-5.3`), or `GLM_DELEGATE_MODEL`;
-`--config-dir` — one per parallel track; `--allow-agent` (crush only)
-re-enables sub-agent tools and **weakens the git ban** (hooks fire only on
-top-level tool calls) — only for tasks with zero repository-state risk.
+`--config-dir` — one per parallel track; `--provider zai|xai` (default zai,
+or `OUTSOURCE_PROVIDER`) selects the provider-table row; `--require-quota N`
+refuses to launch below an N% floor on the plan's tightest window (exit 66);
+`--no-vision-check` overrides the image-spec refusal (exit 65);
+`--allow-agent` (crush only) re-enables sub-agent tools and **weakens the
+git ban** (hooks fire only on top-level tool calls) — only for tasks with
+zero repository-state risk.
+
+Before launching, lint the assembled spec — wrong premises are the measured
+tax on delegation:
+
+```bash
+~/.claude/skills/outsource/bin/spec-lint.sh --root <repo> $SP/spec.md
+```
 
 ## Harness facts — claude-code (measured 2026-08-16)
 
