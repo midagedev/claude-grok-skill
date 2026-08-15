@@ -81,4 +81,4 @@ fi
     | while IFS= read -r f; do checksum "$f"; done
 ) > "$DEST/$MANIFEST"
 
-echo "installed. In Claude Code, invoke with /outsource (backends: grok CLI and/or crush CLI with a z.ai key)."
+echo "installed. In Claude Code, invoke with /outsource (backends: grok CLI, and/or a z.ai key for the GLM harnesses)."
