@@ -37,6 +37,20 @@
   spec's own precondition check correctly told it to stop. A failure and a
   good outcome, same exit code. The marker separates them from a file read
   instead of a transcript hunt.
+- **`tests/run-all.sh`, and `tests/runs-owner.test.sh` under it.** The
+  ownership filter that scopes the status line to one session shipped without
+  a test, and it fails in two directions that look nothing alike: too wide and
+  another window's rounds read as your own, too narrow and a round a teammate
+  launched vanishes from the view you use to notice a round died. Twelve cases
+  cover both, including the ones the status line actually produces — an empty
+  `--owner-claude-pid`, which must narrow nothing and must not switch the
+  filter off — and the same-second same-pid launch that the record id had to
+  grow a suffix for. FAIL-first recorded against `d01bbb4`: 0 of 12.
+  `run-all.sh` exists because there were by then two test files, each
+  documenting its own invocation in a header comment and neither wired to
+  anything; a test nobody runs is a record of a past check, not a gate.
+  Dropping a `*.test.sh` into `tests/` now enrols it, and an empty directory
+  exits 2 rather than reporting success.
 
 ## 0.8.0 — 2026-08-16 — a round you can see while it runs
 
