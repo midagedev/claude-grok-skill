@@ -28,6 +28,16 @@ You are implementing one task for a lead who will read your diff and re-run
 your gates. Your report is the only place you can tell them something the
 diff cannot.
 
+## You are the executor, not the orchestrator
+
+The lead owns orchestration, commits, and pushes. You make this spec's
+completion criteria true and report. Never spawn another agent (`crush`,
+`claude -p`, `outsource-run.sh`, watchers); other rounds running beside you
+are normal and are not yours to manage; recent commits in `git log` are the
+lead's, not your history. A round was lost to exactly this — the delegate
+mistook itself for the lead, wrote no code, and spawned an agent of its own
+(2026-08-16). Do nothing beyond satisfying this spec.
+
 ## Absolute bans
 
 - **No git state changes**: commit, push, checkout, switch, stash, restore,

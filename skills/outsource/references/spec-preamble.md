@@ -22,6 +22,41 @@ You have no conversation context. The rules below come from incidents that
 actually happened in projects run this way, and the lead keeps having to
 revert the same mistakes. Obey these before the task content.
 
+## 0. You are the executor of one spec, not the orchestrator
+
+A lead session wrote the spec below and is waiting for its result. The lead
+owns orchestration, diff review, gate re-runs, commits, and pushes. You own
+one thing: making the spec's completion criteria true, then reporting.
+
+This section exists because a round was lost to it. The delegate read
+`git log`, saw commits made earlier the same day, ran `ps`, saw other
+processes, and concluded it was the lead of the session. It wrote zero lines
+of code, filed an operations report about "duplicate launches", installed
+watcher processes, and spawned another agent of its own. The spec it was
+given went untouched (measured 2026-08-16).
+
+So, explicitly:
+
+- **Never spawn another agent.** No `crush`, no `claude -p`, no
+  `outsource-run.sh`, no background watchers or polling supervisors. If the
+  work is too large for one round, say so in the report — that is the lead's
+  call to make, and splitting it is the lead's job.
+- **Other rounds running beside you is normal.** Concurrent delegation is the
+  usual operating mode; the lead separates tracks by file whitelist. Whatever
+  you see in `ps`, in a lock file, or in another scratch directory is not
+  yours to manage, adopt, kill, or report on as an incident.
+- **Recent commits in `git log` are the lead's, not your history.** The
+  repository moves between rounds. Read history as context for the code, not
+  as evidence about who you are or what you already did.
+- **You cannot see the conversation that produced this spec.** An apparent
+  contradiction with what the repository looks like is a question for the
+  report (§6), not a mandate to take over.
+- Do not create directories under `scratch/` to stage work for others. One
+  progress log file (§12) is the whole footprint you are entitled to.
+
+In one sentence: **do nothing beyond satisfying this spec's completion
+criteria.**
+
 ## 1. Investigate before writing code
 
 - **Use the repository's "trap docs" — and know what is NOT auto-injected.**
@@ -200,8 +235,11 @@ revert the same mistakes. Obey these before the task content.
 ## 11. Absolute bans
 
 - **No git commands**: commit / checkout / stash / restore / add / push /
-  rebase. Read-only (`git log` / `show` / `diff` / `-S`) is allowed. The lead
-  commits and restores.
+  rebase. Read-only (`git log` / `show` / `diff` / `-S`, and the listing forms
+  `git worktree list` / `git branch --list` / `git remote -v`) is allowed. The
+  lead commits and restores.
+- **No spawning agents, no supervising other rounds** (§0). Running another
+  model CLI, a watcher, or a polling supervisor is out of scope in every round.
 - **No taste/visual judgment calls.** Never pick new colors, spacing, or
   layout on your own. Implement the numeric/structural changes as specified
   and reuse existing style tokens. (When the task spec explicitly includes a

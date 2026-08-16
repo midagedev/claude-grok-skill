@@ -151,7 +151,11 @@ identified, not a naming scheme.
 1. **Delegate "done" ≠ done.** Read `git diff` yourself and re-run the
    affected gates under your own ownership. Verify by the tree and the
    spec's completion marker (`DONE-<track>`), never by exit codes or
-   harness lifecycle notifications.
+   harness lifecycle notifications. Pass `--done-marker <string>` at launch
+   and the sentinel records `done_marker=found|absent` for you. Two rounds on
+   one day both exited `rc=0`: one had written nothing at all, the other had
+   correctly stopped because the spec's own precondition check said to. The
+   marker plus the tree tells those apart; the exit code never will.
 2. **Re-run the suite it called green from cold** and compare the test
    count with CI's — a differing count is a failed verification. **Never
    pipe a gate through `tail`/`head`**: the pipeline's exit status becomes

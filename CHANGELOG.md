@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.9.0 — 2026-08-16 — the delegate is not the lead, and read-only git stays read-only
+
+- **`bin/git-guard.sh` blocked a read-only call it was written to allow.**
+  `git -C <repo> worktree list` was refused. The guard erases read-only forms
+  and then runs the deny pass over what is left, but the two passes spelled
+  "global flags before the subcommand" differently: the deny pass understood
+  `-C <path>` and `-c <k=v>` (a flag that swallows the next word), the allow
+  pass did not. So the read-only form was never erased and `worktree` tripped
+  the deny list. A delegate that opened by proving which tree it was in — the
+  thing the specs ask for — got blocked for it, and the next spec learns to
+  drop the check that would have caught a wrong worktree. The flag grammar is
+  now one definition used by both passes.
+- **`tests/git-guard.test.sh`** — 54 cases, the guard's first test of any
+  kind. It asserts both directions, because a security boundary fails two
+  ways: a mutation that slips through costs a repository, and a read-only
+  call that is refused makes agents work blind. FAIL-first recorded against
+  the pre-fix script (3 red: the `-C` and `-c` forms).
+- **Preamble §0: you are the executor of one spec, not the orchestrator.**
+  A round was lost to this. The delegate read `git log`, saw commits made
+  earlier that day, ran `ps`, saw other processes, and concluded it was the
+  lead of the session — then wrote zero lines of code, filed an operations
+  report about "duplicate launches", installed watchers, and spawned another
+  agent of its own. The spec went untouched. The new section says the things
+  that were missing: never spawn an agent, concurrent rounds beside you are
+  normal and not yours to manage, recent commits are the lead's history and
+  not yours, an apparent contradiction goes in the report rather than into
+  taking over. `spec-preamble-core.md` carries the short form, because this
+  failure costs the whole round on either preamble, and §11 names the ban
+  alongside the git one.
+- **`--done-marker <string>` writes `done_marker=found|absent` into the
+  `<log>.rc` sentinel.** `rc` is a lifecycle signal — it says the harness
+  exited cleanly and nothing about whether the round did its job. Both halves
+  of that gap were measured the same day: one round exited `rc=0` having
+  produced no code, and another exited `rc=0` with no edits because the
+  spec's own precondition check correctly told it to stop. A failure and a
+  good outcome, same exit code. The marker separates them from a file read
+  instead of a transcript hunt.
+
 ## 0.8.0 — 2026-08-16 — a round you can see while it runs
 
 - **`bin/runs.sh`** — a registry of delegated runs. Every launch records what

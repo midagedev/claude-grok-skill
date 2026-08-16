@@ -8,6 +8,7 @@
 #                    [--session <id>] [--model <id>] [--config-dir <dir>]
 #                    [--label <name>] [--allow-agent] [--no-vision-check]
 #                    [--require-quota <N%>] [--max-seconds <N>]
+#                    [--done-marker <string>]
 #
 # The model is the point; the harness is how it is driven headlessly:
 #
@@ -80,7 +81,7 @@ set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CWD=""; SPEC=""; LOG=""; SESSION=""; CONFIG_DIR=""; ALLOW_AGENT=0; NO_VISION_CHECK=0
-REQUIRE_QUOTA=""; LABEL=""; MAX_SECONDS=""
+REQUIRE_QUOTA=""; LABEL=""; MAX_SECONDS=""; DONE_MARKER=""
 HARNESS="${OUTSOURCE_HARNESS:-claude-code}"
 PROVIDER="${OUTSOURCE_PROVIDER:-zai}"
 MODEL="${GLM_DELEGATE_MODEL:-}"
@@ -98,6 +99,7 @@ while [ $# -gt 0 ]; do
     --provider) PROVIDER="$2"; shift 2 ;;
     --config-dir) CONFIG_DIR="$2"; shift 2 ;;
     --label) LABEL="$2"; shift 2 ;;
+    --done-marker) DONE_MARKER="$2"; shift 2 ;;
     --allow-agent) ALLOW_AGENT=1; shift ;;
     --no-vision-check) NO_VISION_CHECK=1; shift ;;
     --require-quota) REQUIRE_QUOTA="$2"; shift 2 ;;
@@ -258,8 +260,26 @@ runs_note_finish() {  # <rc> — idempotent; the EXIT trap and finish() both cal
 finish() {  # <exit-code> — sentinel + SESSION line + exit, both harnesses
   runs_note_finish "$1"
   if [ -n "$LOG" ]; then
-    if ! printf 'rc=%s\nfinished=%s\nharness=%s\nprovider=%s\nmodel_requested=%s\nmodel_actual=%s\nsession=%s\n' \
-        "$1" "$(date -u +%FT%TZ)" "$HARNESS" "$PROVIDER" "$MODEL" "$MODEL_ACTUAL" "$SID" \
+    # rc is a *lifecycle* signal: the harness exited cleanly. It says nothing
+    # about whether the round did its job. Both halves of that gap have been
+    # measured on the same day (2026-08-16): one round exited rc=0 having
+    # written no code at all, and another exited rc=0 with no edits because the
+    # spec's own precondition check told it to stop — the first is a failure,
+    # the second is correct, and rc cannot tell them apart. When the lead names
+    # the spec's completion marker with --done-marker, record whether the
+    # transcript actually carries it, so the difference is one file read away
+    # instead of a transcript hunt.
+    marker_line=""
+    if [ -n "$DONE_MARKER" ]; then
+      if [ -s "$LOG" ] && grep -qF -- "$DONE_MARKER" "$LOG" 2>/dev/null; then
+        marker_line="done_marker=found"
+      else
+        marker_line="done_marker=absent"
+      fi
+      marker_line="$marker_line ($DONE_MARKER)"$'\n'
+    fi
+    if ! printf 'rc=%s\nfinished=%s\nharness=%s\nprovider=%s\nmodel_requested=%s\nmodel_actual=%s\nsession=%s\n%s' \
+        "$1" "$(date -u +%FT%TZ)" "$HARNESS" "$PROVIDER" "$MODEL" "$MODEL_ACTUAL" "$SID" "$marker_line" \
         > "$LOG.rc"; then
       echo "outsource: warning: could not write sentinel $LOG.rc" >&2
     fi
