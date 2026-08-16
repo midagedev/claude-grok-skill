@@ -1,6 +1,52 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 — 2026-08-17 — one owner per fact, and docs that cannot dangle
+
+- **`bin/grok-run.sh`** — raw grok rounds join the registry. A hand-assembled
+  `nohup bash -c` launch broke on nested quoting, died silently into
+  `/dev/null`, wrote no sentinel, and never appeared in the status line — two
+  watchers waited on files that would never exist. The launcher now owns the
+  whole contract: runs.sh registration, startup proof (the ndjson must grow
+  within 30s or exit 69 aloud), the same `.rc` sentinel shape as the zai
+  launcher with `done_marker=found|absent`, rc=0 downgraded to 70 when the
+  marker is missing from the final report, and the git-policy profiles
+  encoded instead of copy-pasted. Field-validated on two real rounds.
+- **`bin/last-report.sh`** — one extractor for both report shapes
+  (claude-code's last `result` event, grok's text deltas after the last tool
+  event), instead of the same throwaway Python four times in one night. Exit
+  65 on a report-less log, so a died round is a branch and not a silence. 12
+  fixture cases pair every wanted extraction with decoy content.
+- **`runs.sh dismiss`** — prune keeps orphans on principle (evidence until
+  read), but there was no verb for after reading: two fabricated records from
+  a test draft wore ⚠ in the status line for a day. Dismiss removes one named
+  record and refuses a running round — a live pid is work, not residue.
+  FAIL-first: 6/8 red on the previous runs.sh.
+- **Every documented grok launch now goes through `grok-run.sh`, and the
+  flag strings live only there.** grok.md carried the full raw recipe and
+  three `GIT_POLICY_FLAGS` blocks as a second copy of what the launcher
+  encodes — the drift class this repo keeps measuring, kept in-house. The
+  launcher grew the three options the raw blocks still covered — `--research`
+  (the field-tested write-block belt for investigation and vision rounds),
+  `--resume <SID>` (stop-then-revise on the same session), and `--
+  <flags…>` passthrough (where `--json-schema` rides) — and grok.md keeps
+  the rationale, pointing at the script for the strings.
+- **`scripts/grok-round-status.py` is gone.** It judged round state for
+  hand-launched grok rounds; with every launch registered and sentineled by
+  `grok-run.sh`, its verdicts are `runs.sh` states (running / orphan /
+  done / failed), and the one nuance it added — "finished but bookkeeping
+  lost" vs "killed mid-run" — is the presence of the ndjson `end` event,
+  now one line in grok.md.
+- **`tests/doc-refs.test.sh`** — every repo file a doc points at must exist.
+  spec-lint already did this for specs against a target repo; nothing did it
+  for this repo's own docs, and the inventory had drifted both ways (README
+  still selling the deleted tool, and missing two shipped ones). FAIL-first:
+  4 red on the tree right after the deletion above.
+- `runs.sh --help` printed a fixed line range of the header and had already
+  been truncated mid-sentence by two edits; it now prints the whole comment
+  block, however long it grows. The crush-harness crushrc assembly collapsed
+  from five heredocs (with one comment duplicated verbatim) to three.
+
+### From the spec-lint rounds, same day
 
 - **The to-be-created exemption was by line, so it moved the cry-wolf defect
   one page down instead of fixing it.** A spec names the file it is creating

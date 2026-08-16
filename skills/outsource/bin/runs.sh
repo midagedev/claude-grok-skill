@@ -497,6 +497,8 @@ case "${1:-list}" in
   json)   shift; parse_filter_flags "$@"; cmd_json "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
   list)   shift; parse_filter_flags "$@"; cmd_list "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
   dismiss) shift; cmd_dismiss "$@" ;;
-  -h|--help) sed -n '2,46p' "$0"; exit 0 ;;
+  # The whole header comment, however long it grows — a fixed line range
+  # here was measured to truncate the help mid-sentence after two edits.
+  -h|--help) awk 'NR == 1 { next } /^#/ { print; next } { exit }' "$0"; exit 0 ;;
   *) echo "runs.sh: unknown subcommand: $1 (list|line|json|start|finish|prune|dismiss)" >&2; exit 64 ;;
 esac

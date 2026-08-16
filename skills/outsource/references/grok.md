@@ -13,8 +13,8 @@ references/spec-authoring.md.
 |---|---|---|---|
 | Implementation, single track | strict | — | file whitelist · numeric contract · verification commands · **every CLAUDE.md covering the targets** |
 | Implementation, parallel / risky / registers gates | strict (or trusted for WIP commits) | lead-created worktree `--cwd` | + track boundary, per-package gates, copy-artifacts-out rule |
-| Investigation / census / report | strict (git reads help) | `$RESEARCH_FLAGS` belt; keep `--no-subagents` | narrow questions · premise-check invitation · large output → files per section, not stdout |
-| Vision verdict | readonly-plus | `$RESEARCH_FLAGS`; `--json-schema` for the verdict | 3-element briefing (numeric context first · narrowed question · "do not judge" list); fresh SID, retire after one verdict |
+| Investigation / census / report | strict (git reads help) | `--research` belt; subagents stay off | narrow questions · premise-check invitation · large output → files per section, not stdout |
+| Vision verdict | readonly-plus | `--research`; `-- --json-schema '<schema>'` for the verdict | 3-element briefing (numeric context first · narrowed question · "do not judge" list); fresh SID, retire after one verdict |
 | Image/asset generation | strict | worktree `--cwd` | copy-out path for `~/.grok/sessions/...` outputs · JPEG/matting plan |
 
 Everything below details the rows of this table.
@@ -38,41 +38,25 @@ It registers the round in `runs.sh` (the status line sees it), verifies grok
 actually started (ndjson must grow within 30s, else exit 69 out loud), writes
 the same `<log>.rc` sentinel shape as the zai launcher — including
 `done_marker=found|absent`, with rc downgraded to 70 when a clean exit lacks
-the marker in the final report — and encodes the git-policy profiles below so
+the marker in the final report — and owns the git-policy profiles below so
 they stop being copy-pasted into shells. Read the round's report with
 `bin/last-report.sh <log>`.
 
-The raw recipe below remains the reference for what grok-run.sh does inside
-(and for the rare case that needs a flag it doesn't carry).
+Prepend the shared preamble to the task spec first (`cat
+<skill-dir>/references/spec-preamble.md <scratch>/task.md >
+<scratch>/spec.md`). **Completion is proven by the `<log>.rc` sentinel —
+never by your harness's task notification**, which reports your wrapper
+shell's lifetime, not grok's (see "Round completion" below).
 
-Write the spec to a scratch file and pass it with `--prompt-file`. Run long
-tasks in the background. **Completion is proven by the sentinel file the
-recipe writes after grok exits — never by your harness's task notification**,
-which reports your wrapper shell's lifetime, not grok's (see "Round
-completion" below).
-
-```bash
-# 1) Write the task spec, then prepend the shared preamble.
-cat <skill-dir>/references/spec-preamble.md \
-    <scratch>/task.md > <scratch>/spec.md
-
-# 2) Run in the background — this whole block IS the background command.
-#    Do not wrap it in another layer (`launch.sh &`, exec chains, sleep
-#    guards): one background layer only, or the notification fires while
-#    grok survives as an orphan. The sentinel write must stay attached.
-SID=$(uuidgen | tr 'A-Z' 'a-z'); echo "$SID" > <scratch>/sid-<track>.txt
-grok -s "$SID" --cwd <absolute-worktree-path> \
-  --prompt-file <scratch>/spec.md \
-  -m grok-4.6 --no-memory \
-  --always-approve --permission-mode bypassPermissions \
-  --reasoning-effort xhigh --max-turns 1200 \
-  --no-plan --no-subagents \
-  --output-format streaming-json \
-  $GIT_POLICY_FLAGS \
-  > <scratch>/grok-<track>.ndjson \
-  2> <scratch>/grok-<track>.err
-echo "rc=$? finished=$(date -u +%FT%TZ)" > <scratch>/done-<track>.rc
-```
+`bin/grok-run.sh` itself is the reference for the exact grok invocation (it
+is ~150 readable lines: session pinning with `-s`, `--no-memory`,
+`--always-approve --permission-mode bypassPermissions`, xhigh effort, a
+1200-turn ceiling, `--no-plan --no-subagents`, `streaming-json` with stderr
+split off — each choice justified in the flag notes below). A round that
+needs a grok flag it has no option for gets it through `-- <flags…>`; a
+round that needs one *repeatedly* gets a real option added here — never a
+hand-assembled `nohup bash -c` block, which is the incident this launcher
+closed.
 
 ### Round completion — what counts as evidence
 
@@ -82,15 +66,14 @@ as dead (or a dead one as alive). A harness "task completed" notification, a
 wrapper shell exiting, `pgrep` matching your own watcher, and exit code 0
 have each produced a wrong verdict. The rules:
 
-- **The only completion proof is `done-<track>.rc`** (the sentinel above).
-  Notification without a sentinel = your wrapper exited early and the round
-  is still running — re-attach a watcher, don't collect.
-- Judge state with `scripts/grok-round-status.py` from a clone of this repo
-  (not copied by install.sh):
-  `python3 scripts/grok-round-status.py --scratch <scratch> --track <track>`
-  → `COMPLETED rc=…` / `RUNNING pid=…` / `DIED-NO-SENTINEL …` (the last one
-  distinguishes "finished but sentinel lost" via the ndjson `end` event from
-  "killed mid-run", which may have left a half-written tree).
+- **The only completion proof is the `<log>.rc` sentinel** grok-run.sh
+  writes. Notification without a sentinel = your wrapper exited early and
+  the round is still running — re-attach a watcher, don't collect.
+- Judge state with `bin/runs.sh`: `running` (pid alive), `orphan` (started,
+  pid gone, no rc — the round died without finishing), `done`/`failed` from
+  the recorded rc. For an orphan, the ndjson's last line is the tiebreak: an
+  `end` event means grok finished and only the bookkeeping was lost; no
+  `end` event means it was killed mid-run and the tree may be half-written.
 - If you must poll by process, match the exact session:
   `pgrep -f "grok -s $SID"` — a bare `grok` pattern matches idle leftovers
   and your own watcher loop.
@@ -101,51 +84,34 @@ have each produced a wrong verdict. The rules:
 
 `--deny 'Bash(git *)'` blocks *all* git, including reads — grok then cannot
 inspect commit history, blame, or PRs, which hurts investigation-heavy tasks.
-Choose deliberately:
+`grok-run.sh --git-profile` owns the flag strings; choose deliberately:
 
-```bash
-# 1) strict (recommended default): block state changes, allow reads
-#    (git log/show/diff/blame and gh pr list/view still work).
-#    Field-tested: reads pass, `git commit` is blocked, HEAD unchanged.
-GIT_POLICY_FLAGS="--deny 'Bash(git commit*)' --deny 'Bash(git push*)' \
-  --deny 'Bash(git checkout*)' --deny 'Bash(git switch*)' \
-  --deny 'Bash(git stash*)' --deny 'Bash(git restore*)' \
-  --deny 'Bash(git add*)' --deny 'Bash(git rebase*)' \
-  --deny 'Bash(git reset*)' --deny 'Bash(git merge*)' \
-  --deny 'Bash(git cherry-pick*)' --deny 'Bash(git tag*)' \
-  --deny 'Bash(git worktree add*)' --deny 'Bash(git worktree remove*)' \
-  --deny 'Bash(git worktree prune*)' --deny 'Bash(gh pr create*)' \
-  --deny 'Bash(gh pr merge*)' --deny 'Bash(gh repo *)'"
-# Note the worktree denies are per-subcommand. A blanket `git worktree*`
-# also blocks `git worktree list`, which every spec asks for as the first
-# line of the report — measured 2026-08-16: two grok rounds had to work
-# around their own evidence requirement and said so. Read-only git is
-# deliberately open; keep it that way.
-
-# 2) readonly-plus (paranoid): the old blanket ban. Use for parallel tracks
-#    with tight file boundaries where even a git read prompt is unwanted.
-GIT_POLICY_FLAGS="--deny 'Bash(git *)' --deny 'Bash(git)'"
-
-# 3) trusted: no git denies. Only inside an isolated worktree the lead
-#    created (see "Parallel tracks"), when you WANT grok to make WIP
-#    commits at round boundaries. The lead still reviews history and merges.
-GIT_POLICY_FLAGS=""
-```
+- **strict** (recommended default): per-subcommand denies on every
+  state-changing git/gh form; reads (`git log/show/diff/blame`, `gh pr
+  list|view`) still work. Field-tested: reads pass, `git commit` is blocked,
+  HEAD unchanged. The worktree denies are per-subcommand on purpose — a
+  blanket `git worktree*` also blocks `git worktree list`, which every spec
+  asks for as the first line of the report (measured 2026-08-16: two grok
+  rounds had to work around their own evidence requirement and said so).
+  Read-only git is deliberately open; keep it that way.
+- **readonly-plus** (paranoid): the blanket ban, `git` entirely denied. For
+  parallel tracks with tight file boundaries where even a git read prompt is
+  unwanted — and for vision verdicts.
+- **trusted**: no git denies. Only inside an isolated worktree the lead
+  created (see "Parallel tracks"), when you WANT grok to make WIP commits at
+  round boundaries. The lead still reviews history and merges.
 
 Glob denies are a safety net, not a proof — exotic forms (`git -C <path>
 commit`) can slip past subcommand patterns. Keep the preamble's git rules in
-the spec as the second layer, and treat profile 3 as trust + isolation, not
-as enforcement.
+the spec as the second layer, and treat the trusted profile as trust +
+isolation, not as enforcement.
 
 ### Read-only investigation profile (research / census / audit tasks)
 
 For investigation-only delegations (web research, code census, report
-writing — no tree changes wanted), add a write-block belt on top of a git
-profile:
-
-```bash
-RESEARCH_FLAGS="--deny Write --deny Edit --disallowed-tools write,search_replace"
-```
+writing — no tree changes wanted), add the write-block belt on top of a git
+profile with `grok-run.sh --research` (`--deny Write --deny Edit
+--disallowed-tools write,search_replace`).
 
 Field-tested: five consecutive investigation runs with this belt +
 `--permission-mode bypassPermissions` produced zero tree changes. The part
@@ -240,16 +206,13 @@ Field-tested flag notes:
 
 ### Follow-up in the same context
 
-```bash
-SID=$(uuidgen | tr 'A-Z' 'a-z')
-grok -s "$SID" --prompt-file spec.md ...     # first call
-grok -r "$SID" -p "apply review notes: ..." ... # follow-up
-```
-
-A session id is **pinned once** (`-s`) and only **resumed** afterwards
-(`-r`). Re-invoking `-s` with a used id fails with "Session ID already in
-use" — for a new round (e.g. a FIX round whose spec is self-contained
-anyway), mint a fresh id instead; nothing is lost.
+grok-run.sh mints the session id and writes it to `<log-basename>.sid`; a
+follow-up round passes it back with `--resume "$(cat …/<track>.sid)"`. A
+session id is **pinned once** (`-s`, the launcher's default) and only
+**resumed** afterwards (`-r`, what `--resume` maps to) — re-invoking `-s`
+with a used id fails with "Session ID already in use". For a new round
+(e.g. a FIX round whose spec is self-contained anyway), just launch fresh;
+nothing is lost.
 
 ### Parallel tracks (worktree isolation)
 
@@ -280,8 +243,8 @@ transcript; only the judge's **text verdict** comes back. Recipe:
 
 - Fresh SID per verdict; the judge **retires after one verdict** (image
   turns make these the heaviest sessions). A FIX round gets a *new* judge.
-- Flags: readonly-plus git profile + `$RESEARCH_FLAGS`; `--json-schema` for
-  a parseable SHIP/FIX verdict with per-axis fields.
+- Flags: `--git-profile readonly-plus --research`, plus `-- --json-schema
+  '<schema>'` for a parseable SHIP/FIX verdict with per-axis fields.
 - The briefing has three mandatory elements (each earned by a round of
   decisive verdicts): ① **numeric context first** — the measured table, so
   the judge spends itself on perception, not re-measurement; ② a **narrowed
@@ -360,14 +323,10 @@ Do not use a second `-r` or ACP prompt to redirect a live round.
 
 ```bash
 kill <pid>    # SIGTERM: wait-status 143; the NDJSON log has no `end` line
-grok -r "$SID" --prompt-file <revised-spec.md> \
-  -m grok-4.6 --no-memory --no-plan --no-subagents \
-  --always-approve --permission-mode bypassPermissions \
-  --reasoning-effort xhigh --max-turns 1200 \
-  --output-format streaming-json \
-  $GIT_POLICY_FLAGS \
-  > <scratch>/grok-<track>.ndjson \
-  2> <scratch>/grok-<track>.err
+nohup bash <skill-dir>/bin/grok-run.sh \
+  --cwd <dir> --spec <revised-spec.md> --log <scratch>/grok-<track>.ndjson \
+  --label <track> --resume "$(cat <scratch>/grok-<track>.sid)" \
+  > <scratch>/launch.out 2>&1 &
 ```
 
 Completed tool results stay in the session (after SIGTERM, `-r` answered

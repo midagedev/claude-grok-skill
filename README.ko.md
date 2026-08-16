@@ -292,8 +292,10 @@ $ bin/quota.sh --provider grok
 | `bin/credential.sh` · `bin/setup-key.sh` | 키 **와 호스트** 해석의 단일 소유자(환경변수 → 이 스킬의 0600 저장소 → z.ai 공식 설치본·`crush`가 이미 써 둔 자리), 그리고 그 대화형 절반 |
 | `bin/spec-lint.sh` · `bin/quota.sh` | 발사 전 스펙 검사; `--require-window`로 게이트화되는 플랜 쿼터 |
 | `bin/runs.sh` | 실행 레지스트리: 어떤 라운드가 무엇 위에서 얼마나 오래 살아 있는지 — 그리고 시작만 하고 끝나지 않은 것 |
+| `bin/grok-run.sh` | grok 런처: zai 런처와 같은 레지스트리 등록·센티넬·done-marker 판정, 그리고 git 프로파일 플래그 문자열의 단일 소유자 |
+| `bin/last-report.sh` | 두 로그 형태(claude-code JSONL, grok ndjson) 어느 쪽에서든 라운드의 최종 보고를 추출, 보고가 없으면 exit 65 |
 | `bin/statusline.sh` | Claude Code 스테이터스라인: 세션 한도, 플랜 쿼터, 진행 중 라운드 — 렌더 경로 밖에서 캐시 |
-| `scripts/grok-progress.py` · `scripts/grok-round-status.py` | grok NDJSON 스트림을 진행 이벤트로 압축; 센티넬로 라운드 상태 판정 |
+| `scripts/grok-progress.py` | grok NDJSON 스트림을 한 줄짜리 진행 이벤트로 압축 (리드 쪽 도구; 설치본에는 미포함) |
 
 ## 품질 번들
 

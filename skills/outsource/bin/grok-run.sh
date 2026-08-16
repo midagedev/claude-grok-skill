@@ -5,8 +5,16 @@
 #
 #   grok-run.sh --cwd <dir> --spec <file> --log <file.ndjson> \
 #               [--label L] [--done-marker STRING] \
-#               [--git-profile strict|readonly-plus|trusted] \
-#               [--model grok-4.6] [--reasoning-effort xhigh] [--max-turns N]
+#               [--git-profile strict|readonly-plus|trusted] [--research] \
+#               [--model grok-4.6] [--reasoning-effort xhigh] [--max-turns N] \
+#               [--resume <SID>] [-- <extra grok flags…>]
+#
+# --research adds the write-block belt for investigation/vision rounds
+# (--deny Write --deny Edit --disallowed-tools write,search_replace — the
+# set field-tested to produce zero tree changes across five runs; the
+# --disallowed-tools half is the one doing the enforcing). Flags after `--`
+# go to grok verbatim — that is where --json-schema for a vision verdict
+# rides, instead of a reason to hand-assemble the whole launch again.
 #
 # Field incident this closes (2026-08-17): two grok rounds were "launched"
 # with a hand-assembled `nohup bash -c "... $(printf …) ..."` — the nested
@@ -40,8 +48,9 @@ RUNS="$HERE/runs.sh"
 LAST_REPORT="$HERE/last-report.sh"
 STARTUP_GRACE="${GROK_RUN_STARTUP_GRACE:-30}"
 
-CWD="" SPEC="" LOG="" LABEL="" MARKER="" PROFILE="strict"
+CWD="" SPEC="" LOG="" LABEL="" MARKER="" PROFILE="strict" RESEARCH=0 RESUME=""
 MODEL="grok-4.6" EFFORT="xhigh" MAX_TURNS=1200
+EXTRA=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --cwd)              CWD="$2"; shift 2 ;;
@@ -50,9 +59,12 @@ while [ $# -gt 0 ]; do
     --label)            LABEL="$2"; shift 2 ;;
     --done-marker)      MARKER="$2"; shift 2 ;;
     --git-profile)      PROFILE="$2"; shift 2 ;;
+    --research)         RESEARCH=1; shift ;;
+    --resume)           RESUME="$2"; shift 2 ;;
     --model)            MODEL="$2"; shift 2 ;;
     --reasoning-effort) EFFORT="$2"; shift 2 ;;
     --max-turns)        MAX_TURNS="$2"; shift 2 ;;
+    --)                 shift; EXTRA=("$@"); break ;;
     *) echo "grok-run.sh: unknown flag: $1" >&2; exit 64 ;;
   esac
 done
@@ -63,8 +75,9 @@ done
 command -v grok >/dev/null || { echo "grok-run.sh: grok CLI not on PATH" >&2; exit 69; }
 [ -n "$LABEL" ] || LABEL="$(basename "${SPEC%.md}")"
 
-# Git policy profiles, verbatim from references/grok.md — one owner is that
-# file; this script is where the flags stop being copy-pasted into shells.
+# Git policy profiles. This script is the single owner of the flag strings;
+# references/grok.md keeps the rationale (why the worktree denies are
+# per-subcommand, why glob denies are a net and not a proof) and points here.
 GIT_FLAGS=()
 case "$PROFILE" in
   strict)
@@ -79,8 +92,19 @@ case "$PROFILE" in
   trusted) ;;
   *) echo "grok-run.sh: unknown --git-profile: $PROFILE (strict|readonly-plus|trusted)" >&2; exit 64 ;;
 esac
+if [ "$RESEARCH" -eq 1 ]; then
+  GIT_FLAGS+=(--deny Write --deny Edit --disallowed-tools write,search_replace)
+fi
 
-SID="$(uuidgen | tr 'A-Z' 'a-z')"
+# A session id is pinned once (-s) and only resumed afterwards (-r): grok
+# rejects a second -s on a used id. --resume is for stop-then-revise — kill
+# the round, then relaunch through here with the revised spec and the SID
+# from the .sid file; completed tool results survive in the session.
+if [ -n "$RESUME" ]; then
+  SID="$RESUME"; SESSION_FLAG="-r"
+else
+  SID="$(uuidgen | tr 'A-Z' 'a-z')"; SESSION_FLAG="-s"
+fi
 RC_FILE="${LOG}.rc"
 mkdir -p "$(dirname "$LOG")"
 printf '%s\n' "$SID" > "${LOG%.ndjson}.sid" 2>/dev/null || true
@@ -103,7 +127,7 @@ RUN_ID="$("$RUNS" start --pid $$ --label "$LABEL" --provider xai --harness grok-
 # Launch grok as a child and prove it started before trusting it: the ndjson
 # must exist and be non-empty within the grace window. "The launch command
 # ran" is a lifecycle signal, not evidence — the incident above is why.
-grok -s "$SID" --cwd "$CWD" \
+grok "$SESSION_FLAG" "$SID" --cwd "$CWD" \
   --prompt-file "$SPEC" \
   -m "$MODEL" --no-memory \
   --always-approve --permission-mode bypassPermissions \
@@ -111,6 +135,7 @@ grok -s "$SID" --cwd "$CWD" \
   --no-plan --no-subagents \
   --output-format streaming-json \
   "${GIT_FLAGS[@]+"${GIT_FLAGS[@]}"}" \
+  "${EXTRA[@]+"${EXTRA[@]}"}" \
   > "$LOG" 2> "${LOG%.ndjson}.err" &
 GROK_PID=$!
 

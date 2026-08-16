@@ -292,8 +292,10 @@ $ bin/quota.sh --provider grok
 | `bin/credential.sh` · `bin/setup-key.sh` | The single owner of key *and* host resolution (env var → this skill's 0600 store → what z.ai's own installer and `crush` already wrote), and its interactive half |
 | `bin/spec-lint.sh` · `bin/quota.sh` | Pre-launch spec check; plan quota with `--require-window` as a gate |
 | `bin/runs.sh` | The run registry: which rounds are alive, on what, for how long — and which started and never finished |
+| `bin/grok-run.sh` | The grok launcher: same registry entry, sentinel and done-marker verdict as the zai launcher, plus the git-profile flag strings it owns |
+| `bin/last-report.sh` | The round's final report out of either log shape (claude-code JSONL or grok ndjson), exit 65 when there is none |
 | `bin/statusline.sh` | A Claude Code status line: session budgets, plan quotas, live rounds, cached off the render path |
-| `scripts/grok-progress.py` · `scripts/grok-round-status.py` | Compress a grok NDJSON stream into progress events; judge round state by sentinel |
+| `scripts/grok-progress.py` | Compress a grok NDJSON stream into one-line progress events (lead-side; not installed) |
 
 ## The quality bundle
 

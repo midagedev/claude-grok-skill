@@ -570,22 +570,15 @@ crush)
   [ "$MPREFIX" = "$PROVIDER" ] || {
     echo "--model $MODEL does not match --provider $PROVIDER" >&2; exit 64; }
 
-  # The isolated config replaces the user's global one, so the provider (and its
-  # key) has to be re-declared. The key is resolved inside the crushrc at load
-  # time from the source the provider table names — config: reads the user's
-  # crush config, env: reads the variable — so the secret never transits a file
-  # we write and never reaches a log.
+  # The isolated config replaces the user's global one, so the provider (and
+  # its key) has to be re-declared. The key is resolved inside the crushrc at
+  # load time through bin/credential.sh, the single owner — so the secret
+  # never transits a file we write and never reaches a log.
   cat > "$CONFIG_DIR/crushrc" <<RC
 #!/usr/bin/env bash
 set -euo pipefail
 
-RC
-  # The crushrc resolves the key at load time through the same single owner,
-  # so the secret never transits a file we write and never reaches a log.
-  cat >> "$CONFIG_DIR/crushrc" <<RC
 _key="\$("$CREDENTIAL_SH" "$PROVIDER")" || exit 1
-RC
-  cat >> "$CONFIG_DIR/crushrc" <<RC
 provider add "$PROVIDER" --api-key "\$_key"
 
 # xhigh is this model's own default_reasoning_effort (providers.json), and the
