@@ -324,6 +324,13 @@ default_label() {
 # file: the claude-code harness writes that only once, at the end, so a
 # perfectly healthy round shows an empty log for its entire life.
 # Both are derived from CONFIG_DIR, which is already fixed at this point.
+#
+# The launch also records which Claude Code session owns it, so a status line
+# can show this session's rounds and not the whole machine's. Two keys, since
+# neither alone covers it: the session id is exact but differs for an
+# in-process subagent, and CLAUDE_PID is the Claude Code process that the
+# lead and its teammates share. Absent outside Claude Code, in which case the
+# round is unowned and simply stays out of scoped views.
 case "$HARNESS" in
   claude-code) PROGRESS_DIR="$CONFIG_DIR/claude/projects" ;;
   crush)       PROGRESS_DIR="$CONFIG_DIR/data" ;;
@@ -338,7 +345,9 @@ RUN_ID="$("$RUNS_SH" start \
   --harness "$HARNESS" \
   --model "${MODEL:-$(provider_field "$PROVIDER" "$T_MODEL")}" \
   --cwd "$CWD" --spec "$SPEC" --log "$LOG" \
-  --progress-dir "$PROGRESS_DIR" 2>/dev/null)" || RUN_ID=""
+  --progress-dir "$PROGRESS_DIR" \
+  --owner "${CLAUDE_CODE_SESSION_ID:-}" \
+  --owner-claude-pid "${CLAUDE_PID:-}" 2>/dev/null)" || RUN_ID=""
 
 case "$HARNESS" in
 claude-code)

@@ -89,6 +89,22 @@
   session id still recovered so a follow-up can resume. No default, and it
   should not get one: the kill lands mid-edit. It is an escape hatch for
   rounds whose loss is accepted up front, not the answer to a slow round.
+- **The status line shows this session's rounds, not the machine's.** The
+  registry is global by design — an orphan has to be findable from wherever
+  you are — but every Claude Code window reading it unfiltered meant two
+  windows on two repos narrated each other's work as if it were your own.
+  Caught in the act: a diagnostic on the live status line came back carrying
+  a different session's id than the one that installed it. So each launch
+  records its owner and each status line asks only for its own. Two keys,
+  because one does not cover it: `CLAUDE_CODE_SESSION_ID` is exact but
+  differs for an in-process subagent, and `CLAUDE_PID` is the Claude Code
+  process the lead shares with its teammates — either matching counts as
+  yours. Unowned records (launched outside Claude Code, or predating this)
+  stay out of scoped views rather than appearing in all of them, and
+  `runs.sh` unfiltered still lists everything with an `OWNER` column.
+  `OUTSOURCE_STATUSLINE_SCOPE=all` opts back out. Record ids also gained a
+  collision suffix, since `<epoch>-<pid>` could silently overwrite another
+  round when a pid was recycled inside one second.
 - **`bin/statusline.sh`** — a Claude Code status line built from the two
   scripts above plus `bin/quota.sh`: model, account, context, the 5-hour and
   weekly Claude windows, the z.ai and grok plan windows, and the rounds in

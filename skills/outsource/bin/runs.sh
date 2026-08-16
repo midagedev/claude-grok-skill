@@ -9,6 +9,20 @@
 #   runs.sh finish <run-id> --rc N [--session S] [--model-actual M]
 #   runs.sh prune [--keep-seconds N]  drop finished records older than N
 #
+# list/line/json take `--owner <session-id>` and `--owner-claude-pid <pid>`,
+# which restrict the output to rounds launched from one Claude Code session.
+# The registry is machine-wide on purpose — an orphan has to be findable from
+# wherever you happen to be — but a *status line* showing every session's
+# rounds is noise: it reports another window's work as if it were yours. So
+# the store is global and the filter lives at the reading end.
+#
+# Ownership is recorded as two keys because one is not enough. `CLAUDE_CODE_
+# SESSION_ID` is exact but changes for an in-process subagent, so a round a
+# teammate launched would vanish from the lead's own status line; `CLAUDE_PID`
+# is the Claude Code process, shared by the lead and its in-process agents.
+# Either matching counts as yours. Both are read from the launcher's
+# environment (measured present there, and in the status line's).
+#
 # Why this file exists rather than a `ps` grep at each call site: a launched
 # round is invisible between "I started it" and "it printed a report", and
 # that gap is where a lead loses track of which tracks are still alive, how
@@ -79,11 +93,13 @@ sanitize() { printf '%s' "$1" | tr '\n\r' '  '; }
 R_ID=""; R_PID=""; R_LABEL=""; R_PROVIDER=""; R_HARNESS=""; R_MODEL=""
 R_CWD=""; R_SPEC=""; R_LOG=""; R_STARTED=""; R_RC=""; R_FINISHED=""
 R_SESSION=""; R_MODEL_ACTUAL=""; R_PROGRESS=""
+R_OWNER=""; R_OWNER_PID=""
 
 read_record() {  # <file>; fills R_*; returns 1 on an unreadable file
   R_ID=""; R_PID=""; R_LABEL=""; R_PROVIDER=""; R_HARNESS=""; R_MODEL=""
   R_CWD=""; R_SPEC=""; R_LOG=""; R_STARTED=""; R_RC=""; R_FINISHED=""
   R_SESSION=""; R_MODEL_ACTUAL=""; R_PROGRESS=""
+  R_OWNER=""; R_OWNER_PID=""
   [ -r "$1" ] || return 1
   local k v
   while IFS='=' read -r k v; do
@@ -103,6 +119,8 @@ read_record() {  # <file>; fills R_*; returns 1 on an unreadable file
       session)      R_SESSION="$v" ;;
       modelActual)  R_MODEL_ACTUAL="$v" ;;
       progressDir)  R_PROGRESS="$v" ;;
+      ownerSession) R_OWNER="$v" ;;
+      ownerClaudePid) R_OWNER_PID="$v" ;;
     esac
   done < "$1"
   [ -n "$R_ID" ]
@@ -174,6 +192,33 @@ human_secs() {  # 45s · 12m · 1h04m · 2d3h
 
 harness_short() { case "$1" in claude-code) echo cc ;; *) echo "$1" ;; esac; }
 
+# ---- ownership filter -------------------------------------------------------
+# Set by the shared flag parser below; empty means "no filter, show everything".
+FILTER_OWNER=""; FILTER_OWNER_PID=""
+
+parse_filter_flags() {  # consumes --owner / --owner-claude-pid, leaves the rest
+  REMAINING_ARGS=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --owner)            FILTER_OWNER="$2"; shift 2 ;;
+      --owner-claude-pid) FILTER_OWNER_PID="$2"; shift 2 ;;
+      *) REMAINING_ARGS+=("$1"); shift ;;
+    esac
+  done
+}
+
+# True when the loaded record belongs to the caller. A record predating the
+# ownership fields, or launched outside Claude Code, has no owner at all and
+# is therefore nobody's — it stays out of a scoped view rather than showing
+# up in every one of them. `runs.sh` with no filter still lists it, which is
+# where you go looking when something is missing.
+mine() {
+  { [ -z "$FILTER_OWNER" ] && [ -z "$FILTER_OWNER_PID" ]; } && return 0
+  [ -n "$FILTER_OWNER" ] && [ "$R_OWNER" = "$FILTER_OWNER" ] && return 0
+  [ -n "$FILTER_OWNER_PID" ] && [ -n "$R_OWNER_PID" ] && [ "$R_OWNER_PID" = "$FILTER_OWNER_PID" ] && return 0
+  return 1
+}
+
 # Oldest first; prints nothing when the directory is absent or empty.
 each_record() {
   [ -d "$RUNS_DIR" ] || return 0
@@ -188,9 +233,12 @@ each_record() {
 
 cmd_start() {
   local pid="" label="" provider="" harness="" model="" cwd="" spec="" log="" progress=""
+  local owner="" owner_pid=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --progress-dir) progress="$2"; shift 2 ;;
+      --progress-dir)    progress="$2"; shift 2 ;;
+      --owner)           owner="$2"; shift 2 ;;
+      --owner-claude-pid) owner_pid="$2"; shift 2 ;;
       --pid)      pid="$2"; shift 2 ;;
       --label)    label="$2"; shift 2 ;;
       --provider) provider="$2"; shift 2 ;;
@@ -204,10 +252,15 @@ cmd_start() {
   done
   [ -n "$pid" ] || { echo "runs.sh start: --pid is required" >&2; exit 64; }
 
-  local started id
+  local started id n
   started="$(now_epoch)"
-  id="$started-$pid"
   mkdir -p "$RUNS_DIR"
+  # <epoch>-<pid> is unique among *live* launchers, since a pid is. It is not
+  # unique against a record left behind by a dead process whose pid was
+  # recycled inside the same second — rare, but the failure mode is silent
+  # overwrite of someone else's round, so the id takes a suffix instead.
+  id="$started-$pid"; n=1
+  while [ -e "$RUNS_DIR/$id.run" ]; do n=$(( n + 1 )); id="$started-$pid-$n"; done
 
   # Write-then-rename: a status line reading the directory concurrently sees
   # either no record or a complete one, never half of one.
@@ -223,6 +276,8 @@ cmd_start() {
     printf 'spec=%s\n'        "$(sanitize "$spec")"
     printf 'log=%s\n'         "$(sanitize "$log")"
     printf 'progressDir=%s\n' "$(sanitize "$progress")"
+    printf 'ownerSession=%s\n'   "$(sanitize "$owner")"
+    printf 'ownerClaudePid=%s\n' "$(sanitize "$owner_pid")"
     printf 'startedAt=%s\n'   "$started"
   } > "$tmp"
   mv "$tmp" "$RUNS_DIR/$id.run"
@@ -286,8 +341,9 @@ cmd_list() {
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     read_record "$f" || continue
+    mine || continue
     if [ "$any" -eq 0 ]; then
-      printf '%-8s %-16s %-6s %-6s %8s %6s  %s\n' STATE LABEL PROV HARNESS ELAPSED IDLE SPEC
+      printf '%-8s %-16s %-6s %-6s %8s %6s %-9s %s\n' STATE LABEL PROV HARNESS ELAPSED IDLE OWNER SPEC
       any=1
     fi
     st="$(state_of)"
@@ -297,8 +353,9 @@ cmd_list() {
       idle="$(idle_of)"
       [ -n "$idle" ] && idle_col="$(human_secs "$idle")" || idle_col="?"
     fi
-    printf '%-8s %-16s %-6s %-6s %8s %6s  %s\n' \
-      "$st" "${R_LABEL:0:16}" "$R_PROVIDER" "$(harness_short "$R_HARNESS")" "$el" "$idle_col" "$R_SPEC"
+    printf '%-8s %-16s %-6s %-6s %8s %6s %-9s %s\n' \
+      "$st" "${R_LABEL:0:16}" "$R_PROVIDER" "$(harness_short "$R_HARNESS")" "$el" "$idle_col" \
+      "${R_OWNER:0:8}${R_OWNER:+…}" "$R_SPEC"
     case "$st" in
       failed) printf '         rc=%s  log=%s\n' "$R_RC" "${R_LOG:-none}" ;;
       orphan) printf '         started but never finished — pid %s is gone; log=%s\n' "$R_PID" "${R_LOG:-none}" ;;
@@ -345,6 +402,7 @@ cmd_line() {
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     read_record "$f" || continue
+    mine || continue
     st="$(state_of)"
     case "$st" in
       running|orphan) ;;
@@ -385,13 +443,14 @@ cmd_json() {
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     read_record "$f" || continue
+    mine || continue
     [ "$first" -eq 1 ] || printf ','
     first=0
     # Emitted by python so the strings are escaped correctly; the values
     # arrive as argv, never interpolated into the program text.
     python3 -c 'import json,sys
 k = ["id","pid","label","provider","harness","model","cwd","spec","log",
-     "progressDir","startedAt","rc","finishedAt","session","modelActual",
+     "progressDir","ownerSession","ownerClaudePid","startedAt","rc","finishedAt","session","modelActual",
      "state","elapsedSeconds","idleSeconds","stalled"]
 v = sys.argv[1:]
 d = dict(zip(k, v))
@@ -400,7 +459,7 @@ for n in ("pid","startedAt","finishedAt","rc","elapsedSeconds","idleSeconds"):
 d["stalled"] = d["stalled"] == "1"
 sys.stdout.write(json.dumps(d, separators=(",", ":")))' \
       "$R_ID" "$R_PID" "$R_LABEL" "$R_PROVIDER" "$R_HARNESS" "$R_MODEL" \
-      "$R_CWD" "$R_SPEC" "$R_LOG" "$R_PROGRESS" "$R_STARTED" "$R_RC" "$R_FINISHED" \
+      "$R_CWD" "$R_SPEC" "$R_LOG" "$R_PROGRESS" "$R_OWNER" "$R_OWNER_PID" "$R_STARTED" "$R_RC" "$R_FINISHED" \
       "$R_SESSION" "$R_MODEL_ACTUAL" "$(state_of)" "$(elapsed_of)" "$(idle_of)" \
       "$(if [ "$(state_of)" = running ] && stalled; then echo 1; else echo 0; fi)"
   done <<EOF
@@ -413,9 +472,9 @@ case "${1:-list}" in
   start)  shift; cmd_start "$@" ;;
   finish) shift; cmd_finish "$@" ;;
   prune)  shift; cmd_prune "$@" ;;
-  line)   shift; cmd_line "$@" ;;
-  json)   shift; cmd_json "$@" ;;
-  list)   shift; cmd_list "$@" ;;
+  line)   shift; parse_filter_flags "$@"; cmd_line "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
+  json)   shift; parse_filter_flags "$@"; cmd_json "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
+  list)   shift; parse_filter_flags "$@"; cmd_list "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
   -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
   *) echo "runs.sh: unknown subcommand: $1 (list|line|json|start|finish|prune)" >&2; exit 64 ;;
 esac

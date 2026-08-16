@@ -187,7 +187,7 @@ budget() {  # <label> <percent> <reset-epoch> -> "5H 8%/3h20m"
 # bash collapses runs of it, so a session with no rate limits — six empty
 # fields in a row — would shift `cwd` up into the context slot and print the
 # working directory as a percentage. A non-whitespace IFS does not collapse.
-IFS=$'\037' read -r model_raw ctx_used five_pct five_reset week_pct week_reset cwd branch <<EOF
+IFS=$'\037' read -r model_raw ctx_used five_pct five_reset week_pct week_reset cwd branch session_id <<EOF
 $(printf '%s' "$input" | jq -r '[
     (.model.display_name // .model.id // ""),
     (.context_window.used_percentage // ""),
@@ -196,7 +196,8 @@ $(printf '%s' "$input" | jq -r '[
     (.rate_limits.seven_day.used_percentage // ""),
     (.rate_limits.seven_day.resets_at // ""),
     (.cwd // .workspace.current_dir // ""),
-    (.workspace.git_worktree // "")
+    (.workspace.git_worktree // ""),
+    (.session_id // "")
   ] | map(tostring) | join("")')
 EOF
 
@@ -310,11 +311,35 @@ if [ -n "$PROVIDERS" ] && [ -x "$QUOTA_SH" ]; then
   done
 fi
 
-# Live delegated rounds, straight from the registry the launcher writes.
+# Live delegated rounds, straight from the registry the launcher writes —
+# scoped to this session. The registry is machine-wide, and it should be: an
+# orphaned round has to be findable from wherever you are. But a status line
+# is a report on *your* window, so another window's rounds appearing here
+# read as your own work and are worse than showing nothing. Two windows open
+# on two repos otherwise narrate each other.
+#
+# Ownership is matched on the session id and on the Claude Code process, so
+# a round an in-process teammate launched still counts as this session's.
+# OUTSOURCE_STATUSLINE_SCOPE=all opts back out to the whole machine.
 runs_part=""
 if [ -x "$RUNS_SH" ]; then
-  runs_line=$("$RUNS_SH" line 2>/dev/null)
-  [ -n "$runs_line" ] && runs_part="${CYAN}${runs_line}${RESET}"
+  runs_scope=(); runs_ok=1
+  if [ "${OUTSOURCE_STATUSLINE_SCOPE:-session}" != all ]; then
+    owner="${session_id:-${CLAUDE_CODE_SESSION_ID:-}}"
+    owner_pid="${CLAUDE_PID:-}"
+    if [ -n "$owner" ] || [ -n "$owner_pid" ]; then
+      runs_scope=(--owner "$owner" --owner-claude-pid "$owner_pid")
+    else
+      # No identity at all: an empty filter means "no filter" downstream, so
+      # asking anyway would print the whole machine — precisely what scoping
+      # is here to prevent. Claim nothing instead; `runs.sh` still has it.
+      runs_ok=0
+    fi
+  fi
+  if [ "$runs_ok" -eq 1 ]; then
+    runs_line=$("$RUNS_SH" line "${runs_scope[@]+"${runs_scope[@]}"}" 2>/dev/null)
+    [ -n "$runs_line" ] && runs_part="${CYAN}${runs_line}${RESET}"
+  fi
 fi
 
 # Where you are, de-emphasised and last: it is the one thing on this line you

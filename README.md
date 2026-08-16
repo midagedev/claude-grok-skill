@@ -121,6 +121,8 @@ It costs about 120 ms per render because it never calls a quota API on the rende
 
 **Silence means exactly one thing: this backend is not set up here.** Everything else has its own mark, so an absent segment is never ambiguous — a number not measured yet shows `…`, and a measurement that can no longer be refreshed is carried forward prefixed `~` rather than erased. That last rule was written after shipping without it: an expired `grok` sign-in made the whole segment vanish, reporting a backend that had just stopped working exactly like one that was never configured. Nothing is ever silently rendered as `0%`.
 
+**The rounds shown are this session's.** The registry is machine-wide on purpose — an orphan has to be findable from wherever you are — but a status line reports on *your* window, and two Claude Code windows open on two repos would otherwise narrate each other's work as if it were yours. So the store stays global and the filter lives at the reading end: each launch records the session that owns it, and each status line asks only for its own. Ownership is matched on both the session id and the Claude Code process, so a round an in-process teammate launched still counts as yours. `runs.sh` unfiltered still shows the whole machine with an `OWNER` column, which is where you look when something is missing; `OUTSOURCE_STATUSLINE_SCOPE=all` puts that view back in the status line.
+
 Set `OUTSOURCE_STATUSLINE_PROVIDERS=""` to drop the quota row entirely, or e.g. `"zai"` to keep one. Needs `jq` and `python3`.
 
 ## The three models
