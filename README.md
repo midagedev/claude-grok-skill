@@ -15,6 +15,13 @@ It is not a wrapper. It is an operating manual with receipts: every rule in it c
 
 Adding a provider is one table row — base URL, default model, vision capability — plus its key resolution in `bin/credential.sh`. Two places, both single-owner, no code branch.
 
+It also ships the [status line](#status-line) that makes delegation legible while it happens — what stops this session, what stops the next round, and what is running right now:
+
+```
+opus │ you@example.com │ CTX 12% │ 5H 8%/3h20m │ 1W 38%/4d2h
+z.ai 29%/6d4h │ grok 98%/2h19m │ 🛠2 ▶api zai·crush 12m  ▶tests zai·cc 4m │ repo (main)
+```
+
 ## Install
 
 ```
@@ -57,6 +64,64 @@ Say **"run this via glm"** or **"run this via grok"** in any Claude Code session
 4. **reviews the result like a lead**: reads the diff itself, re-runs the gates cold, walks a checklist of the places delegated reports actually leak.
 
 The core principle: **the delegate is an executor of tight specs.** It has zero conversation context, so every delegation stands alone — and it is never asked for taste judgments, only numeric contracts.
+
+## Seeing the rounds you launched
+
+A delegated round runs in the background, and between "I launched it" and "it reported" it is invisible. Every launch therefore registers itself, and `bin/runs.sh` reads the registry back:
+
+```
+$ bin/runs.sh
+STATE    LABEL            PROV   HARNESS  ELAPSED  SPEC
+running  api-migration    zai    crush       12m   /tmp/sp/spec-api.md
+running  test-backfill    zai    cc           4m   /tmp/sp/spec-tests.md
+orphan   docs-sweep       xai    crush     1h07m   /tmp/sp/spec-docs.md
+         started but never finished — pid 48120 is gone; log=/tmp/sp/docs.log
+```
+
+`orphan` is the reason this exists. A round that was killed, or died when the machine slept, leaves *no process at all* — so a `ps` grep reports the same nothing for "finished cleanly" and "died an hour ago holding your worktree". Started-but-never-finished is a state only a written record can hold. `bin/runs.sh json` is the same data for scripts.
+
+### A long round is not a stuck round
+
+Neither harness can stop itself — `crush run` exposes no turn or time limit in its flag set at all, and this `claude` CLI has no `--max-turns`, only `--max-budget-usd` at Anthropic's prices, which says nothing about a z.ai plan. The tempting fix is a time limit. Measured across ten delivered rounds, it is the wrong one: they ran 13 minutes to **1h50m**, with duration tracking message count almost linearly (66 messages / 13m … 848 messages / 1h50m). Long rounds were long because there was a lot of work. A time limit truncates those and still misses a round that wedged at minute three.
+
+So the registry measures **output, not duration**. Both harnesses write continuously into their own data directory, so `runs.sh` reports an `IDLE` column and flags `⏳` only when a running round has written nothing for ten minutes (`OUTSOURCE_RUN_STALL`):
+
+```
+▶refshot zai·crush 1h41m        # 101 minutes in, wrote a second ago — leave it alone
+⏳frozen  zai·crush 22m ⋯14m     # silent for 14 of its 22 minutes — go read the log
+```
+
+Those two are the real discrimination: an elapsed-time rule would have flagged the healthy 101-minute round and said nothing about the wedged one. Note that the `--log` file is *not* the signal — the claude-code harness writes it once, at the end, so a perfectly healthy round shows an empty log for its entire life; the trail is `data/crush.db-wal` and `data/logs/crush.log` for crush, `claude/projects/**.jsonl` for the claude-code harness.
+
+A stall is a reason to read the log, not to kill anything. `bin/outsource-run.sh --max-seconds N` does hard-kill at N seconds (SIGTERM then SIGKILL to the whole process group, exit 124 in both the sentinel and the registry, session id still recovered so a follow-up can resume) — it has no default and should not get one, because the kill lands mid-edit. Use it only where losing the round is acceptable up front.
+
+`--label` is what the track is **for**, and it is worth typing on every launch, because the listing only earns its keep in parallel and that is exactly when the derived default fails: this skill's documented layout writes every track's spec to `<scratch>/spec.md`, one dir per track, so a basename-derived label would read `spec` three times. The default therefore falls back to the directory holding the spec — usually the track's own scratch dir — and a label that still collides renders as `name`, `name#2`: a warning that the round you are looking at cannot be identified, not a naming scheme.
+
+## Status line
+
+`bin/statusline.sh` puts the registry above, and the plan quotas from [`bin/quota.sh`](#guardrails), into Claude Code's status line — the budgets that stop this session, the ones that stop the next round, and what is running right now:
+
+```
+opus │ you@example.com │ CTX 12% │ 5H 8%/3h20m │ 1W 38%/4d2h
+z.ai 29%/6d4h │ grok 98%/2h19m │ 🛠2 ▶api zai·crush 12m  ▶tests zai·cc 4m │ repo (main)
+```
+
+Add it to `~/.claude/settings.json`:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "bash ~/.claude/skills/outsource/bin/statusline.sh"
+}
+```
+
+Every budget is one token — `NAME used%/until-it-resets`. The percentage says how much is gone; the second half says how long until it comes back. Neither is actionable alone, which is why there is no bar here: a bar spends thirty columns on the first half and cannot render the second at all. Colour carries the alarm instead (green under 50, yellow under 80, red at 80+), and `grok 98%/2h19m` reads at a glance as *nearly out, but not for long*.
+
+It costs about 120 ms per render because it never calls a quota API on the render path: those take one to two seconds, so a lock-guarded background refresh writes a small cache every `OUTSOURCE_STATUSLINE_TTL` seconds (default 180) and a burst of renders makes one fetch.
+
+**Silence means exactly one thing: this backend is not set up here.** Everything else has its own mark, so an absent segment is never ambiguous — a number not measured yet shows `…`, and a measurement that can no longer be refreshed is carried forward prefixed `~` rather than erased. That last rule was written after shipping without it: an expired `grok` sign-in made the whole segment vanish, reporting a backend that had just stopped working exactly like one that was never configured. Nothing is ever silently rendered as `0%`.
+
+Set `OUTSOURCE_STATUSLINE_PROVIDERS=""` to drop the quota row entirely, or e.g. `"zai"` to keep one. Needs `jq` and `python3`.
 
 ## The three models
 
@@ -209,62 +274,6 @@ z.ai coding plan: level max — GLM Coding Max (status VALID, valid 2026-08-15~0
 $ bin/quota.sh --provider grok
 1w window: exact counts not exposed by this API, 98.0% used / 2.0% left, resets at 15:13 (in 6h 36m)
 ```
-
-## Seeing the rounds you launched
-
-A delegated round runs in the background, and between "I launched it" and "it reported" it is invisible. Every launch therefore registers itself, and `bin/runs.sh` reads the registry back:
-
-```
-$ bin/runs.sh
-STATE    LABEL            PROV   HARNESS  ELAPSED  SPEC
-running  api-migration    zai    crush       12m   /tmp/sp/spec-api.md
-running  test-backfill    zai    cc           4m   /tmp/sp/spec-tests.md
-orphan   docs-sweep       xai    crush     1h07m   /tmp/sp/spec-docs.md
-         started but never finished — pid 48120 is gone; log=/tmp/sp/docs.log
-```
-
-`orphan` is the reason this exists. A round that was killed, or died when the machine slept, leaves *no process at all* — so a `ps` grep reports the same nothing for "finished cleanly" and "died an hour ago holding your worktree". Started-but-never-finished is a state only a written record can hold. `bin/runs.sh json` is the same data for scripts.
-
-### A long round is not a stuck round
-
-Neither harness can stop itself — `crush run` exposes no turn or time limit in its flag set at all, and this `claude` CLI has no `--max-turns`, only `--max-budget-usd` at Anthropic's prices, which says nothing about a z.ai plan. The tempting fix is a time limit. Measured across ten delivered rounds, it is the wrong one: they ran 13 minutes to **1h50m**, with duration tracking message count almost linearly (66 messages / 13m … 848 messages / 1h50m). Long rounds were long because there was a lot of work. A time limit truncates those and still misses a round that wedged at minute three.
-
-So the registry measures **output, not duration**. Both harnesses write continuously into their own data directory, so `runs.sh` reports an `IDLE` column and flags `⏳` only when a running round has written nothing for ten minutes (`OUTSOURCE_RUN_STALL`):
-
-```
-▶refshot zai·crush 1h41m        # 101 minutes in, wrote a second ago — leave it alone
-⏳frozen  zai·crush 22m ⋯14m     # silent for 14 of its 22 minutes — go read the log
-```
-
-Those two are the real discrimination: an elapsed-time rule would have flagged the healthy 101-minute round and said nothing about the wedged one. Note that the `--log` file is *not* the signal — the claude-code harness writes it once, at the end, so a perfectly healthy round shows an empty log for its entire life; the trail is `data/crush.db-wal` and `data/logs/crush.log` for crush, `claude/projects/**.jsonl` for the claude-code harness.
-
-A stall is a reason to read the log, not to kill anything. `bin/outsource-run.sh --max-seconds N` does hard-kill at N seconds (SIGTERM then SIGKILL to the whole process group, exit 124 in both the sentinel and the registry, session id still recovered so a follow-up can resume) — it has no default and should not get one, because the kill lands mid-edit. Use it only where losing the round is acceptable up front.
-
-`--label` is what the track is **for**, and it is worth typing on every launch, because the listing only earns its keep in parallel and that is exactly when the derived default fails: this skill's documented layout writes every track's spec to `<scratch>/spec.md`, one dir per track, so a basename-derived label would read `spec` three times. The default therefore falls back to the directory holding the spec — usually the track's own scratch dir — and a label that still collides renders as `name`, `name#2`: a warning that the round you are looking at cannot be identified, not a naming scheme.
-
-## Status line
-
-`bin/statusline.sh` puts all of the above into Claude Code's status line — the budgets that stop this session, the plan quotas that stop the next round, and what is running right now:
-
-```
-opus │ you@example.com │ CTX 12% │ 5H 8%/3h20m │ 1W 38%/4d2h
-z.ai 29%/6d4h │ grok 98%/2h19m │ 🛠2 ▶api zai·crush 12m  ▶tests zai·cc 4m │ repo (main)
-```
-
-Add it to `~/.claude/settings.json`:
-
-```json
-"statusLine": {
-  "type": "command",
-  "command": "bash ~/.claude/skills/outsource/bin/statusline.sh"
-}
-```
-
-Every budget is one token — `NAME used%/until-it-resets`. The percentage says how much is gone; the second half says how long until it comes back. Neither is actionable alone, which is why there is no bar here: a bar spends thirty columns on the first half and cannot render the second at all. Colour carries the alarm instead (green under 50, yellow under 80, red at 80+), and `grok 98%/2h19m` reads at a glance as *nearly out, but not for long*.
-
-It costs about 120 ms per render because it never calls a quota API on the render path: a background refresh writes a small cache every `OUTSOURCE_STATUSLINE_TTL` seconds (default 180), guarded by a lock so a burst of renders makes one fetch. A number that has not been measured yet shows `…`, and one that has gone stale is prefixed `~` — neither is ever silently rendered as `0%`.
-
-Everything degrades to silence: no z.ai key, never signed in to grok, no delegated run on record — that segment simply disappears. Set `OUTSOURCE_STATUSLINE_PROVIDERS=""` to drop the quota row entirely, or e.g. `"zai"` to keep one. Needs `jq` and `python3`.
 
 ## What's inside
 
