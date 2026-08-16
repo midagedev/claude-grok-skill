@@ -31,6 +31,13 @@
 # catches. A :line suffix is an explicit claim about a specific file, so
 # bare names carrying one are still checked.
 #
+# Paths the spec marks as ones to create — under a `Create:` / `New files:`
+# heading or list, or after `Create: <path>` inline — are not premises about
+# the tree, and are exempt from the missing check. They get the opposite one
+# instead: a to-be-created path that already exists is reported, because the
+# spec and the tree then disagree about what the round is for. The count of
+# exemptions is printed on the ok line, so the suppression stays visible.
+#
 # Never checked (templates are not claims): URLs and www.* domains, bare
 # domains (no known extension), tokens containing "<" or ">" or $VAR/${VAR},
 # globs with * or ?, "..."-abbreviated paths, and anything inside a
@@ -113,6 +120,51 @@ SPAN = re.compile(r"<[^<>]{0,300}>")
 # checked. (Kept as its own pattern rather than folded into SPAN: SPAN caps
 # its length to survive a stray "<<", and a comment block is legitimately long.)
 COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+# A spec that has the delegate create files names those files, and they do
+# not exist yet — that is the point. Linting them as missing premises meant
+# every creating spec (most of them) opened with guaranteed findings, which
+# is the precision problem this file's header keeps warning about, arriving
+# from the other direction.
+#
+# So a path the spec marks as to-be-created is exempt from the missing check
+# — and gains a different one. If it already exists, the spec and the tree
+# disagree about what this round is: the lead is about to send someone to
+# create a file that is already there, and either the path is stale or the
+# work is done. That is a real finding, and it is only visible here.
+CREATE_OPEN = re.compile(
+    r"^\s*(?:[-*+]\s+)?(?:#+\s*)?(?:\*\*)?"
+    r"(?:create|creates?d?|new files?|files? to create|to create|add files?)"
+    r"(?:\*\*)?\s*:\s*$", re.I)
+CREATE_INLINE = re.compile(
+    r"^\s*(?:[-*+]\s+)?(?:#+\s*)?(?:\*\*)?"
+    r"(?:create|new files?|files? to create|to create|add files?)"
+    r"(?:\*\*)?\s*:\s+\S", re.I)
+# Inside a creation block: a list item, or a wrapped continuation of one.
+LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
+CONTINUATION = re.compile(r"^\s{2,}\S")
+
+
+def creation_lines(lines):
+    """Line numbers (1-based) whose path references are to-be-created."""
+    marked, in_block = set(), False
+    for i, line in enumerate(lines, 1):
+        if CREATE_INLINE.match(line):
+            marked.add(i)
+            in_block = False
+            continue
+        if CREATE_OPEN.match(line):
+            in_block = True
+            continue
+        if not in_block:
+            continue
+        if not line.strip():
+            continue  # a blank line inside a list does not end it
+        if LIST_ITEM.match(line) or CONTINUATION.match(line):
+            marked.add(i)
+        else:
+            in_block = False
+    return marked
 
 
 def is_template(tok):
@@ -209,6 +261,7 @@ def line_count(path):
 findings = 0
 for spec in specs:
     spec_findings = 0
+    exempt_count = 0
     seen = set()
     bases = [root]
     for extra in (toplevel(root), os.path.dirname(os.path.abspath(spec))):
@@ -219,6 +272,7 @@ for spec in specs:
     # Spans are matched over the whole file (they may wrap lines); tokens
     # below carry file-level offsets to match.
     whole = "".join(lines)
+    to_create = creation_lines(lines)
     sp = [(m.start(), m.end()) for m in SPAN.finditer(whole)]
     sp += [(m.start(), m.end()) for m in COMMENT.finditer(whole)]
     off = 0
@@ -247,6 +301,13 @@ for spec in specs:
                 continue
             seen.add(key)
             resolved, exists = resolve(path, bases)
+            if lineno in to_create:
+                exempt_count += 1
+                if exists:
+                    print(f"{spec}:{lineno}: already-exists: {tok} "
+                          f"(spec says create it; resolved: {resolved})")
+                    spec_findings += 1
+                continue
             if not exists:
                 print(f"{spec}:{lineno}: missing: {tok} (resolved: {resolved})")
                 spec_findings += 1
@@ -257,7 +318,10 @@ for spec in specs:
                           f"(file has {total} lines)")
                     spec_findings += 1
     if spec_findings == 0 and not quiet:
-        print(f"{spec}: ok")
+        # The exemption count is printed rather than kept quiet: a
+        # suppression nobody can see is how a linter starts lying.
+        note = f" ({exempt_count} to-be-created exempt)" if exempt_count else ""
+        print(f"{spec}: ok{note}")
     findings += spec_findings
 
 sys.exit(1 if findings else 0)

@@ -51,6 +51,24 @@
   anything; a test nobody runs is a record of a past check, not a gate.
   Dropping a `*.test.sh` into `tests/` now enrols it, and an empty directory
   exits 2 rather than reporting success.
+- **`bin/spec-lint.sh` reported every file a spec asked the delegate to
+  create as a missing premise.** Which is most specs, so most linting runs
+  opened with guaranteed findings — the exact precision failure the file's
+  own header warns about twice, arriving from the other side. A path marked
+  to-be-created (a `Create:` / `New files:` heading or list, or an inline
+  `Create: <path>`) is no longer a claim about the tree and is exempt. It
+  gains the opposite check instead: a to-be-created path that already exists
+  is reported, because then the spec and the tree disagree about what the
+  round is for. The count of exemptions prints on the `ok` line, since a
+  suppression nobody can see is how a linter starts lying.
+- **`tests/spec-lint.test.sh`** — 12 cases, half of them the defects that
+  must stay loud next to the ones that went quiet: prose after a creation
+  block is still linted, a heading ends the block, the inline form exempts
+  one line, and a sentence that merely begins with "Create" and ends in a
+  colon does not swallow the rest of the document. FAIL-first against the
+  pre-change script: exactly the 5 new-behaviour cases red, the 7 regression
+  cases green — which is what makes them regression cases rather than
+  decoration.
 
 ## 0.8.0 — 2026-08-16 — a round you can see while it runs
 

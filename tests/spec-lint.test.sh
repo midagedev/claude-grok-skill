@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# spec-lint.sh, with the to-be-created exemption as the centre of gravity.
+#
+# The exemption is the dangerous kind of feature: it makes the linter say
+# less. Every case here therefore comes in a pair — the thing that must now
+# be quiet, and a real defect placed right next to it that must still be
+# loud. A creation block that swallows the rest of the document would look
+# exactly like a clean spec.
+#
+#   SPEC_LINT=/path/to/spec-lint.sh tests/spec-lint.test.sh
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LINT="${SPEC_LINT:-$HERE/skills/outsource/bin/spec-lint.sh}"
+[ -x "$LINT" ] || { echo "not executable: $LINT" >&2; exit 2; }
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+mkdir -p "$TMP/root/pkg"
+printf 'one\ntwo\nthree\n' > "$TMP/root/pkg/exists.go"
+
+pass=0; fail=0
+out=""; rc=0
+
+run() {  # <spec body on stdin>; sets $out and $rc
+  cat > "$TMP/spec.md"
+  out="$("$LINT" --root "$TMP/root" "$TMP/spec.md" 2>&1)"; rc=$?
+}
+
+ok() {  # <description> <expected-rc> <grep-pattern-that-must-appear|-> <pattern-that-must-not|->
+  local desc="$1" want_rc="$2" must="$3" mustnot="$4"
+  local bad=""
+  [ "$rc" = "$want_rc" ] || bad="rc=$rc want=$want_rc"
+  if [ "$must" != "-" ] && ! printf '%s' "$out" | grep -q -- "$must"; then
+    bad="$bad; missing output: $must"
+  fi
+  if [ "$mustnot" != "-" ] && printf '%s' "$out" | grep -q -- "$mustnot"; then
+    bad="$bad; unexpected output: $mustnot"
+  fi
+  if [ -z "$bad" ]; then pass=$(( pass + 1 )); else
+    fail=$(( fail + 1 ))
+    printf 'FAIL  %s\n      %s\n      output: %s\n' "$desc" "$bad" "$out"
+  fi
+}
+
+# ---- the baseline the exemption must not erase ------------------------------
+
+run <<'EOF'
+See `pkg/exists.go` for the pattern.
+EOF
+ok "an existing path is clean" 0 "ok" "missing"
+
+run <<'EOF'
+See `pkg/absent.go` for the pattern.
+EOF
+ok "a missing path is still a finding" 1 "missing: pkg/absent.go" "-"
+
+run <<'EOF'
+See `pkg/exists.go:99` for the pattern.
+EOF
+ok "a line citation past EOF is still a finding" 1 "line-out-of-range" "-"
+
+# ---- the exemption ----------------------------------------------------------
+
+run <<'EOF'
+## File whitelist
+
+Create:
+- `pkg/brandnew.go`
+- `pkg/brandnew_test.go`
+EOF
+ok "a create block exempts its paths" 0 "2 to-be-created exempt" "missing"
+
+run <<'EOF'
+Create: `pkg/brandnew.go`
+EOF
+ok "the inline form exempts its path" 0 "1 to-be-created exempt" "missing"
+
+run <<'EOF'
+New files:
+- `pkg/brandnew.go`
+EOF
+ok "New files: opens a block too" 0 "1 to-be-created exempt" "missing"
+
+# ---- the exemption's own new finding ----------------------------------------
+
+run <<'EOF'
+Create:
+- `pkg/exists.go`
+EOF
+ok "creating a file that is already there is a finding" 1 "already-exists: pkg/exists.go" "-"
+
+# ---- the block must end -----------------------------------------------------
+
+run <<'EOF'
+Create:
+- `pkg/brandnew.go`
+
+Then read `pkg/absent.go` and follow it.
+EOF
+ok "prose after a block is checked again" 1 "missing: pkg/absent.go" "-"
+
+run <<'EOF'
+Create:
+- `pkg/brandnew.go`
+
+- and this list item is still part of it: `pkg/alsonew.go`
+EOF
+ok "a blank line does not end a list" 0 "2 to-be-created exempt" "missing"
+
+run <<'EOF'
+Create: `pkg/brandnew.go`
+Also read `pkg/absent.go`.
+EOF
+ok "the inline form exempts one line only" 1 "missing: pkg/absent.go" "-"
+
+run <<'EOF'
+Create:
+
+## Next section
+
+Read `pkg/absent.go`.
+EOF
+ok "a heading ends the block" 1 "missing: pkg/absent.go" "-"
+
+# The sentence that would be catastrophic to misread as a block opener: it
+# ends in a colon and starts with the word, but has prose after it.
+run <<'EOF'
+Create the parser described below, then:
+read `pkg/absent.go` for the existing convention.
+EOF
+ok "prose beginning with Create is not an opener" 1 "missing: pkg/absent.go" "-"
+
+printf '\nspec-lint: %d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]
