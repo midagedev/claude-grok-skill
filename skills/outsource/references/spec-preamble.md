@@ -2,11 +2,18 @@
 This file is the shared front matter for every outsourced spec, whatever
 the backend. The lead writes a per-task spec, then merges:
 
-  cat skills/outsource/references/spec-preamble.md \
-      [skills/outsource/references/glm-preamble.md]  \
-      task.md > spec.md          # glm delta only for GLM-5.3 runs Every rule here came from a real incident.
-If a task spec must relax one of these rules, state the exception explicitly
-in that spec.
+  cat <skill-dir>/references/spec-preamble.md \
+      [<skill-dir>/references/glm-preamble.md] \
+      task.md > spec.md          # the glm delta only for GLM-5.3 runs
+
+The paths are written <skill-dir>-relative on purpose: bin/spec-lint.sh
+resolves path-shaped references against the *target repository*, so a bare
+`skills/outsource/…` here is reported as a missing file in every single
+round — and a linter that always prints one finding is a linter people stop
+reading.
+
+Every rule here came from a real incident. If a task spec must relax one of
+these rules, state the exception explicitly in that spec.
 -->
 
 # Shared rules (read these before the task spec)

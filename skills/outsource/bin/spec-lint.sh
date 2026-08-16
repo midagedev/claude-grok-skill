@@ -104,6 +104,15 @@ EDGE = "`\"'()[]{}<>,;:.!?*|\\…—–«»“”‘’"
 # references/spec-template.md do. The length cap keeps a stray "<<"
 # heredoc from opening a span that swallows the rest of the document.
 SPAN = re.compile(r"<[^<>]{0,300}>")
+# An HTML comment is a note to the lead about the skill's own layout — how to
+# assemble the spec, which file owns which rule — not a citation the delegate
+# will act on. Linting it meant every assembled spec reported the preamble's
+# own `references/…` paths as missing from the *target* repo, which is one
+# guaranteed finding per round: the fastest way to teach someone to stop
+# reading a linter. Real citations live in the spec body, which is still
+# checked. (Kept as its own pattern rather than folded into SPAN: SPAN caps
+# its length to survive a stray "<<", and a comment block is legitimately long.)
+COMMENT = re.compile(r"<!--.*?-->", re.S)
 
 
 def is_template(tok):
@@ -209,7 +218,9 @@ for spec in specs:
         lines = f.readlines()
     # Spans are matched over the whole file (they may wrap lines); tokens
     # below carry file-level offsets to match.
-    sp = [(m.start(), m.end()) for m in SPAN.finditer("".join(lines))]
+    whole = "".join(lines)
+    sp = [(m.start(), m.end()) for m in SPAN.finditer(whole)]
+    sp += [(m.start(), m.end()) for m in COMMENT.finditer(whole)]
     off = 0
     for lineno, line in enumerate(lines, 1):
         base, off = off, off + len(line)
