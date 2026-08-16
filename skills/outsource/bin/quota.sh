@@ -8,7 +8,7 @@
 # Providers, and where each one's numbers come from:
 #
 #   zai   the coding plan's own console API, authenticated with the api key
-#         from the user's crush config (same lookup as outsource-run.sh):
+#         bin/credential.sh resolves:
 #           /api/monitor/usage/quota/limit   data.level + data.limits[]
 #           /api/biz/subscription/list       plan name/status/validity
 #         Two rolling windows (5-hour and weekly) with real credit counts.
@@ -20,6 +20,8 @@
 #         Percent only: xAI exposes no credit counts here, so allowance/
 #         consumed/remaining are null and the percentage is the whole signal.
 #
+# The zai key comes from bin/credential.sh, the single owner of credential
+# resolution (env var first, then this skill's 0600 store, then discovery).
 # Neither credential is ever echoed, written to a file this script creates,
 # or passed on a command line — both ride curl's stdin as a config file.
 # The Grok auth file also holds the account's email and user id; this script
@@ -57,8 +59,6 @@
 #             · 64 usage error.
 set -euo pipefail
 
-USER_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/crush/crush.json"
-
 PROVIDER="zai"; MODE="human"; QUIET=0; REQUIRE=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -85,15 +85,6 @@ fi
 # ---- credentials -----------------------------------------------------------
 # Each branch fills HEADERS (curl -K config lines, one "header =" per line).
 # HEADERS holds the secret; it is never printed and never leaves this process.
-
-read_key() {  # crush provider name -> api key on stdout; never echoed elsewhere
-  python3 -c 'import json,sys
-try:
-    d = json.load(open(sys.argv[1]))
-except Exception:
-    sys.exit(1)
-print((((d.get("providers") or {}).get(sys.argv[2])) or {}).get("api_key", ""))' "$USER_CONFIG" "$1" 2>/dev/null || true
-}
 
 # The Grok CLI stores OAuth sessions in auth.json keyed by issuer. Prefer the
 # default xAI issuer (bare or "issuer::<id>"); alternate issuers are a
@@ -131,8 +122,8 @@ zai)
   BASE="${ZAI_QUOTA_BASE:-https://api.z.ai}"
   # ZAI_QUOTA_KEY / ZAI_QUOTA_BASE are test hooks for this script's own
   # verification, not part of the CLI surface.
-  KEY="${ZAI_QUOTA_KEY:-$(read_key zai)}"
-  [ -n "$KEY" ] || { echo "quota.sh: no api_key for provider 'zai' in $USER_CONFIG" >&2; exit 1; }
+  KEY="${ZAI_QUOTA_KEY:-$("$(dirname "${BASH_SOURCE[0]}")/credential.sh" zai || true)}"
+  [ -n "$KEY" ] || exit 1   # credential.sh already said where it looked
   HEADERS="$(printf 'header = "Authorization: Bearer %s"\n' "$KEY")"
   URLS=("$BASE/api/monitor/usage/quota/limit" "$BASE/api/biz/subscription/list")
   ;;

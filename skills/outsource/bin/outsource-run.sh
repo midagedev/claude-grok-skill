@@ -78,16 +78,19 @@ done
 # read it). One line per provider:
 #   name | Anthropic-compatible base URL | credential source | default model
 #   (bare id; the crush harness qualifies it to <name>/<model>) | vision
-# Credential sources: `config:<crush-provider>` reads that provider's api_key
-# from the user's crush config at launch time; `env:<VAR>` reads a variable.
+# Credentials are NOT in this table: bin/credential.sh is their single owner
+# (env var first, then this skill's own 0600 store, then discovery of files
+# another tool already wrote). Adding a provider here means adding its
+# resolution there too — one place, not two.
 # The base-URL column is consumed by the claude-code harness (ANTHROPIC_BASE_
 # URL); the crush harness resolves endpoints through crush's own provider
 # registry — measured: crush's built-in zai points at
 # https://api.z.ai/api/coding/paas/v4, not the Anthropic-compatible URL, so
 # forcing this column into `provider add` would break the working zai path.
-PROVIDER_TABLE='zai|https://api.z.ai/api/anthropic|config:zai|glm-5.3|no
-xai|https://api.x.ai|env:XAI_API_KEY|grok-4.6|yes'
-T_URL=2 T_KEY=3 T_MODEL=4 T_VISION=5
+PROVIDER_TABLE='zai|https://api.z.ai/api/anthropic|glm-5.3|no
+xai|https://api.x.ai|grok-4.6|yes'
+T_URL=2 T_MODEL=3 T_VISION=4
+CREDENTIAL_SH="$SKILL_DIR/bin/credential.sh"
 
 provider_names() { printf '%s\n' "$PROVIDER_TABLE" | cut -d'|' -f1; }
 
@@ -100,15 +103,6 @@ provider_field() {  # <name> <column> -> value on stdout; empty when unknown
 
 CONFIG_DIR="${CONFIG_DIR:-${TMPDIR:-/tmp}/outsource-glm-cfg}"
 mkdir -p "$CONFIG_DIR"
-
-read_key() {  # provider name -> api key on stdout; never echoed elsewhere
-  python3 -c 'import json,sys
-try:
-    d = json.load(open(sys.argv[1]))
-except Exception:
-    sys.exit(1)
-print((((d.get("providers") or {}).get(sys.argv[2])) or {}).get("api_key", ""))' "$USER_CONFIG" "$1" 2>/dev/null || true
-}
 
 # C5: vision-spec guard. The capability comes from the table — never a
 # provider-name test at the call site. vision must be an explicit "yes" to
@@ -170,20 +164,9 @@ claude-code)
   MODEL="${MODEL:-$(provider_field "$PROVIDER" "$T_MODEL")}"
 
   # Credential from the table's source; zai keeps the original lookup path.
-  KEY_SRC="$(provider_field "$PROVIDER" "$T_KEY")"
-  case "$KEY_SRC" in
-  config:*)
-    KEY="$(read_key "${KEY_SRC#config:}")"
-    [ -n "$KEY" ] || { echo "outsource: no api_key for provider '${KEY_SRC#config:}' in $USER_CONFIG" >&2; exit 1; }
-    ;;
-  env:*)
-    KEY_VAR="${KEY_SRC#env:}"
-    KEY="${!KEY_VAR:-}"
-    [ -n "$KEY" ] || { echo "outsource: provider '$PROVIDER' needs \$$KEY_VAR set (no config-file fallback)" >&2; exit 1; }
-    ;;
-  *)
-    echo "outsource: provider table entry for '$PROVIDER' has no credential source" >&2; exit 64 ;;
-  esac
+  # One owner for credentials; its message already names every place it
+  # tried and how to set the key, so pass it straight through.
+  KEY="$("$CREDENTIAL_SH" "$PROVIDER")" || exit 1
 
   # An isolated CLAUDE_CONFIG_DIR keeps the user's own Claude Code untouched
   # and gives this track its own settings/session store.
@@ -389,21 +372,11 @@ crush)
 set -euo pipefail
 
 RC
-  KEY_SRC="$(provider_field "$PROVIDER" "$T_KEY")"
-  case "$KEY_SRC" in
-  config:*)
-    cat >> "$CONFIG_DIR/crushrc" <<RC
-_key="\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["providers"]["${KEY_SRC#config:}"]["api_key"])' "$USER_CONFIG" 2>/dev/null || true)"
-[ -n "\$_key" ] || { echo "outsource: no api_key for provider '${KEY_SRC#config:}' in $USER_CONFIG" >&2; exit 1; }
+  # The crushrc resolves the key at load time through the same single owner,
+  # so the secret never transits a file we write and never reaches a log.
+  cat >> "$CONFIG_DIR/crushrc" <<RC
+_key="\$("$CREDENTIAL_SH" "$PROVIDER")" || exit 1
 RC
-    ;;
-  env:*)
-    cat >> "$CONFIG_DIR/crushrc" <<RC
-_key="\$(printenv "${KEY_SRC#env:}" || true)"
-[ -n "\$_key" ] || { echo "outsource: provider '$PROVIDER' needs \$${KEY_SRC#env:} set (no config-file fallback)" >&2; exit 1; }
-RC
-    ;;
-  esac
   cat >> "$CONFIG_DIR/crushrc" <<RC
 provider add "$PROVIDER" --api-key "\$_key"
 

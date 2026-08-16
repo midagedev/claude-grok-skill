@@ -111,7 +111,11 @@ tax on delegation:
   The launcher maps everything to config in a scratch directory named by
   `CRUSH_GLOBAL_CONFIG` (a directory, not a file). The user's
   `~/.config/crush` stays untouched; the API key is read from it at load
-  time and never written into our files or logs.
+  time and never written into our files or logs. Resolution itself belongs to
+`bin/credential.sh`: `$ZAI_API_KEY`, then this skill's 0600 store, then
+discovery of a crush config or z.ai's own Claude Code helper settings (the
+latter only when its `ANTHROPIC_BASE_URL` is a z.ai host, so a real Anthropic
+token can never be lifted). `bin/setup-key.sh zai` is the interactive half.
 - Auto-approval = `permissions allow …`; sub-agents off = `permissions deny
   agent task`; there is no turn cap — rely on the `DONE-<track>` marker.
 - The git ban is a `PreToolUse` hook (`git-guard.sh`) that reads the actual

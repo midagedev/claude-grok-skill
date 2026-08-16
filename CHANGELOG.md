@@ -2,6 +2,21 @@
 
 ## 0.7.0 — 2026-08-16 — guardrails with exit codes
 
+- **`bin/credential.sh` + `bin/setup-key.sh`** — key resolution gets a single
+  owner, and the skill stops requiring another CLI's config file to hold your
+  key. Order: the provider's env var (`ZAI_API_KEY` / `XAI_API_KEY`), then
+  this skill's own `~/.config/outsource/credentials` at mode 0600, then
+  discovery of files another tool already wrote — a crush config, or z.ai's
+  official Claude Code helper settings. That last one is read **only when its
+  `ANTHROPIC_BASE_URL` is a z.ai host**, so a real Anthropic subscription
+  token can never be lifted and sent to a third party.
+  `setup-key.sh` is the interactive half: it prompts with echo off, verifies
+  the key against z.ai *before* storing it, and writes 0600. The launcher
+  never prompts — it runs headless in the background, where a prompt hangs a
+  round instead of failing it, so it points at `setup-key.sh` and exits.
+  The generated crush config now calls `credential.sh` at load time, so no
+  file this skill writes ever contains a key (verified).
+
 Shipped alongside a 14-round, three-way comparison (Opus 5 / grok-4.6 /
 GLM-5.3, same spec, five real tickets, isolated worktrees) — written up in
 the README. Four changes below come straight out of it.
