@@ -119,7 +119,11 @@ print(e.get("expires_at") or "")' 2>/dev/null || true
 BASE=""; URLS=(); HEADERS=""
 case "$PROVIDER" in
 zai)
-  BASE="${ZAI_QUOTA_BASE:-https://api.z.ai}"
+  # The monitor endpoints hang off the same host that serves the account —
+  # api.z.ai for the global coding plan, open.bigmodel.cn for the mainland one
+  # — so the host comes from credential.sh rather than being assumed here.
+  # (z.ai's own usage script derives it the same way, from ANTHROPIC_BASE_URL.)
+  BASE="${ZAI_QUOTA_BASE:-$("$(dirname "${BASH_SOURCE[0]}")/credential.sh" zai --base-url https://api.z.ai)}"
   # ZAI_QUOTA_KEY / ZAI_QUOTA_BASE are test hooks for this script's own
   # verification, not part of the CLI surface.
   KEY="${ZAI_QUOTA_KEY:-$("$(dirname "${BASH_SOURCE[0]}")/credential.sh" zai || true)}"

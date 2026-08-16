@@ -33,17 +33,17 @@ cd outsource
 
 [Claude Code](https://claude.com/claude-code)와 백엔드 최소 하나가 필요합니다 — 인증된 `grok` CLI, 그리고/또는 z.ai 코딩플랜 키.
 
-키는 한 번만 설정하면 됩니다. 아래 명령이 입력을 받아 **저장 전에 z.ai로 검증**하고 `~/.config/outsource/credentials`에 0600으로 씁니다:
+**이미 z.ai를 설정하셨다면** — `npx @z_ai/coding-helper`로든, `crush` CLI로든 — 할 일이 없습니다. 그 도구들이 넣어 둔 자리에서 키를 찾아 씁니다.
+
+**아니라면** 한 번만 설정하면 됩니다. 아래 명령이 입력을 받아 **저장 전에 z.ai로 검증**하고 `~/.config/outsource/credentials`에 0600으로 씁니다:
 
 ```bash
 ~/.claude/skills/outsource/bin/setup-key.sh zai
 ```
 
-`export ZAI_API_KEY=…` 가 언제나 우선하고, 이미 `crush` CLI나 z.ai 공식 Claude Code 헬퍼를 쓰고 계시면 기존 키를 자동으로 찾아 씁니다 — 할 일 없습니다. 그 해석의 **단일 소유자**가 `bin/credential.sh`입니다. 런처는 절대 묻지 않습니다 — 백그라운드 헤드리스로 도는 자리에서 물으면 라운드가 실패하는 대신 **멈춰버리기** 때문입니다. `crush` CLI 자체는 `--harness crush`일 때만 필요합니다.
+`export ZAI_API_KEY=…` 는 둘 다 이깁니다. 그 해석의 **단일 소유자**가 `bin/credential.sh`이고, 계정이 어느 호스트에 있는지도 여기가 정합니다 — 중국 플랜이면 글로벌 호스트에서 401나는 대신 `open.bigmodel.cn`으로 갑니다. 런처는 절대 묻지 않습니다: 백그라운드 헤드리스로 도는 자리에서 물으면 라운드가 실패하는 대신 **멈춰버리기** 때문입니다. `crush` CLI 자체는 `--harness crush`일 때만 필요합니다.
 
-> **레퍼럴 링크 — 명시합니다.** z.ai 플랜이 아직 없으시면, 이 **레퍼럴** 링크로 10% 할인을 받으실 수 있고 이 프로젝트에 적립됩니다: **https://z.ai/subscribe?ic=P7NR6BGEGL** (레퍼럴 코드 `P7NR6BGEGL`)
->
-> 이 저장소에 있는 유일한 레퍼럴 링크이고, **레퍼럴이라고 표시되지 않은 자리에는 절대 쓰지 않습니다** — 여기 있는 다른 모든 z.ai 링크는 순수한 https://z.ai/subscribe 로 갑니다. 사용은 전적으로 선택이며, 쓰든 안 쓰든 스킬은 똑같이 동작합니다.
+> **레퍼럴 링크:** https://z.ai/subscribe?ic=P7NR6BGEGL — 10% 할인을 받으시고, 이 프로젝트에 적립됩니다. 선택 사항이고, 이 문서의 다른 z.ai 링크는 전부 순수한 https://z.ai/subscribe 입니다.
 
 **업데이트.** 마켓플레이스: `/plugin marketplace update outsource` 후 `claude plugin update outsource`. 스크립트 설치: `git pull && ./install.sh` — 체크섬 매니페스트 덕에 무수정 설치본은 플래그 없이 올라가고, 손으로 고친 설치본만 `--force`가 필요합니다(`references/local-overlay.md`는 항상 보존).
 
@@ -222,7 +222,7 @@ $ bin/quota.sh --provider grok
 | `references/spec-authoring.md` · `references/spec-template.md` | 품질 번들, 그리고 태스크별 스펙 골격 |
 | `bin/outsource-run.sh` | 런처: 프로바이더 테이블, 하네스 선택, 트랙별 격리 config, 세션 재개, 비전·쿼터 가드, 모델 정체성 단언, 완료 센티넬 |
 | `bin/git-guard.sh` | git 금지 `PreToolUse` 훅. 파일 하나가 두 하네스 처리 (회귀 29케이스) |
-| `bin/credential.sh` · `bin/setup-key.sh` | 키 해석의 단일 소유자(환경변수 → 이 스킬의 0600 저장소 → 탐색), 그리고 그 대화형 절반 |
+| `bin/credential.sh` · `bin/setup-key.sh` | 키 **와 호스트** 해석의 단일 소유자(환경변수 → 이 스킬의 0600 저장소 → z.ai 공식 설치본·`crush`가 이미 써 둔 자리), 그리고 그 대화형 절반 |
 | `bin/spec-lint.sh` · `bin/quota.sh` | 발사 전 스펙 검사; `--require-window`로 게이트화되는 플랜 쿼터 |
 | `scripts/grok-progress.py` · `scripts/grok-round-status.py` | grok NDJSON 스트림을 진행 이벤트로 압축; 센티넬로 라운드 상태 판정 |
 

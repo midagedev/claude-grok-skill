@@ -113,9 +113,19 @@ tax on delegation:
   `~/.config/crush` stays untouched; the API key is read from it at load
   time and never written into our files or logs. Resolution itself belongs to
 `bin/credential.sh`: `$ZAI_API_KEY`, then this skill's 0600 store, then
-discovery of a crush config or z.ai's own Claude Code helper settings (the
-latter only when its `ANTHROPIC_BASE_URL` is a z.ai host, so a real Anthropic
-token can never be lifted). `bin/setup-key.sh zai` is the interactive half.
+discovery — `~/.chelper/config.yaml` (written by `npx @z_ai/coding-helper`,
+the vendor's own installer), a crush config, or the helper's Claude Code
+settings (that last one only when its `ANTHROPIC_BASE_URL` is a z.ai host, so
+a real Anthropic token can never be lifted). `bin/setup-key.sh zai` is the
+interactive half.
+- **Two hosts, one plan family.** The coding plan is `api.z.ai` globally and
+  `open.bigmodel.cn` in mainland China; the same key 401s against the wrong
+  one. `credential.sh <provider> --base-url <default>` is the single owner of
+  that choice — it reads the helper's `plan:` field, falls back to the base
+  URL in Claude Code's settings, and otherwise returns the provider table's
+  default unchanged. `$ZAI_BASE_URL` overrides everything. Both the launcher
+  and `quota.sh` (whose monitor endpoints hang off the same host) go through
+  it. Measured on the global plan only; the China host is wired, not verified.
 - Auto-approval = `permissions allow …`; sub-agents off = `permissions deny
   agent task`; there is no turn cap — rely on the `DONE-<track>` marker.
 - The git ban is a `PreToolUse` hook (`git-guard.sh`) that reads the actual

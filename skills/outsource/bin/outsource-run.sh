@@ -76,12 +76,15 @@ done
 
 # ---- provider table (the one place a provider is defined; both harnesses
 # read it). One line per provider:
-#   name | Anthropic-compatible base URL | credential source | default model
-#   (bare id; the crush harness qualifies it to <name>/<model>) | vision
+#   name | Anthropic-compatible base URL | default model (bare id; the crush
+#   harness qualifies it to <name>/<model>) | vision
 # Credentials are NOT in this table: bin/credential.sh is their single owner
 # (env var first, then this skill's own 0600 store, then discovery of files
 # another tool already wrote). Adding a provider here means adding its
 # resolution there too — one place, not two.
+# The URL here is the provider's *default*; credential.sh --base-url may point
+# it at the same account's other region (z.ai's coding plan ships on api.z.ai
+# globally and open.bigmodel.cn in mainland China).
 # The base-URL column is consumed by the claude-code harness (ANTHROPIC_BASE_
 # URL); the crush harness resolves endpoints through crush's own provider
 # registry — measured: crush's built-in zai points at
@@ -188,7 +191,11 @@ PY
 
   # The env prefix cannot decorate a subshell, so export into this branch
   # only; the vars die with the launcher process.
-  BASE_URL="$(provider_field "$PROVIDER" "$T_URL")"
+  # The table declares the provider's default; credential.sh may point it at
+  # the same account's other region (the z.ai coding plan ships on api.z.ai
+  # globally and open.bigmodel.cn in mainland China, and the vendor's own
+  # installer records which one you bought).
+  BASE_URL="$("$CREDENTIAL_SH" "$PROVIDER" --base-url "$(provider_field "$PROVIDER" "$T_URL")")"
   if [ "$PROVIDER" = zai ] && [ -n "$ZAI_ANTHROPIC_BASE" ]; then
     BASE_URL="$ZAI_ANTHROPIC_BASE"  # back-compat env override, zai only
   fi

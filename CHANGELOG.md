@@ -16,6 +16,19 @@
   round instead of failing it, so it points at `setup-key.sh` and exits.
   The generated crush config now calls `credential.sh` at load time, so no
   file this skill writes ever contains a key (verified).
+- **z.ai's own installer counts as setup.** Discovery reads
+  `~/.chelper/config.yaml`, where `npx @z_ai/coding-helper` — the vendor's
+  documented path — keeps the key it verified, so following z.ai's own
+  instructions leaves nothing to paste here.
+- **The plan's two regions.** `credential.sh <provider> --base-url <default>`
+  now owns which host an account lives on: the global coding plan is
+  `api.z.ai`, the mainland-China one `open.bigmodel.cn`, and the same key 401s
+  against the wrong one. It reads the helper's `plan:` field, falls back to
+  Claude Code's `ANTHROPIC_BASE_URL`, and otherwise hands back the provider
+  table's default untouched; `$ZAI_BASE_URL` overrides all of it. The launcher
+  and `quota.sh` both resolve through it — z.ai's own usage script derives its
+  monitor endpoints from the base URL the same way. Measured end to end on the
+  global plan; the China host is wired from the vendor's source, not verified.
 
 Shipped alongside a 14-round, three-way comparison (Opus 5 / grok-4.6 /
 GLM-5.3, same spec, five real tickets, isolated worktrees) — written up in

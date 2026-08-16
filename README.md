@@ -33,17 +33,17 @@ cd outsource
 
 You need [Claude Code](https://claude.com/claude-code) plus at least one backend: an authenticated `grok` CLI, and/or a z.ai coding-plan key.
 
-Set the key once — this prompts, verifies it against z.ai before storing, and writes `~/.config/outsource/credentials` at mode 0600:
+**If you already set up z.ai** — with `npx @z_ai/coding-helper`, or the `crush` CLI — there is nothing to do. Your key is found where those tools put it.
+
+**Otherwise**, set it once. This prompts, verifies the key against z.ai before storing it, and writes `~/.config/outsource/credentials` at mode 0600:
 
 ```bash
 ~/.claude/skills/outsource/bin/setup-key.sh zai
 ```
 
-`export ZAI_API_KEY=…` always takes precedence, and if you already use the `crush` CLI or z.ai's official Claude Code helper, your existing key is discovered automatically — nothing to do. `bin/credential.sh` is the single owner of that resolution; the launcher never prompts, because it runs headless in the background where a prompt would hang a round instead of failing it. The `crush` CLI itself is only needed for `--harness crush`.
+`export ZAI_API_KEY=…` beats both. `bin/credential.sh` is the single owner of that resolution — and of which host your account lives on, so a mainland-China plan reaches `open.bigmodel.cn` instead of 401ing against the global one. The launcher never prompts: it runs headless in the background, where a prompt would hang a round instead of failing it. The `crush` CLI itself is only needed for `--harness crush`.
 
-> **Referral link — disclosed.** If you don't have the z.ai plan yet, this **referral** link gives you 10% off and credits this project: **https://z.ai/subscribe?ic=P7NR6BGEGL** (referral code `P7NR6BGEGL`).
->
-> It is the only referral link in this repository, and it is never used anywhere it isn't labelled as one — every other z.ai link here goes to the plain https://z.ai/subscribe. Using it is entirely optional; the skill works identically either way.
+> **Referral link:** https://z.ai/subscribe?ic=P7NR6BGEGL — 10% off for you, credit for this project. Optional; every other z.ai link here is the plain https://z.ai/subscribe.
 
 **Updating.** Marketplace: `/plugin marketplace update outsource`, then `claude plugin update outsource`. Script installs: `git pull && ./install.sh` — a checksum manifest lets unmodified installs upgrade without flags; hand-edited installs need `--force` (`references/local-overlay.md` always survives).
 
@@ -222,7 +222,7 @@ $ bin/quota.sh --provider grok
 | `references/spec-authoring.md` · `references/spec-template.md` | The quality bundle, and the per-task spec skeleton |
 | `bin/outsource-run.sh` | The launcher: provider table, harness picker, isolated config per track, session resume, vision/quota guards, model-identity assertion, completion sentinel |
 | `bin/git-guard.sh` | The git-ban `PreToolUse` hook, one file for both harnesses (29 regression cases) |
-| `bin/credential.sh` · `bin/setup-key.sh` | The single owner of key resolution (env var → this skill's 0600 store → discovery), and its interactive half |
+| `bin/credential.sh` · `bin/setup-key.sh` | The single owner of key *and* host resolution (env var → this skill's 0600 store → what z.ai's own installer and `crush` already wrote), and its interactive half |
 | `bin/spec-lint.sh` · `bin/quota.sh` | Pre-launch spec check; plan quota with `--require-window` as a gate |
 | `scripts/grok-progress.py` · `scripts/grok-round-status.py` | Compress a grok NDJSON stream into progress events; judge round state by sentinel |
 

@@ -3,8 +3,9 @@
 # "where does the key come from" — the launcher, the crush config it
 # generates, and bin/quota.sh all call this rather than each carrying a copy.
 #
-#   credential.sh <provider>          # key on stdout, or exit 1
-#   credential.sh <provider> --where  # name the source only, never the key
+#   credential.sh <provider>                     # key on stdout, or exit 1
+#   credential.sh <provider> --where             # name the source, never the key
+#   credential.sh <provider> --base-url <deflt>  # the provider's base URL
 #
 # Resolution order (first non-empty wins):
 #
@@ -32,12 +33,74 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 STORE="$CONFIG_HOME/outsource/credentials"
 CRUSH_CONFIG="$CONFIG_HOME/crush/crush.json"
 CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+# z.ai's own installer (`npx @z_ai/coding-helper`) keeps the key and the plan
+# here. It is the vendor's documented path, so it is the first place worth
+# looking after this skill's own store.
+CHELPER_CONFIG="$HOME/.chelper/config.yaml"
 
 case "$PROVIDER" in
   zai) ENV_VAR="ZAI_API_KEY" ;;
   xai) ENV_VAR="XAI_API_KEY" ;;
   *)   echo "credential.sh: unknown provider '$PROVIDER' (known: zai xai)" >&2; exit 64 ;;
 esac
+
+# chelper_field reads one scalar out of the helper's config.yaml without
+# needing a YAML parser: the file is flat `key: value`, written by js-yaml.
+chelper_field() {
+  [ -r "$CHELPER_CONFIG" ] || return 0
+  sed -n "s/^$1:[[:space:]]*//p" "$CHELPER_CONFIG" | head -n1 | tr -d '"'"'"'\r'
+}
+
+# --base-url resolves which host this provider's account actually lives on. The
+# z.ai coding plan ships in two regions with different hosts — api.z.ai for the
+# global plan, open.bigmodel.cn for the mainland-China one — and the helper
+# records which one you bought as `plan:`. Reading it here means a China-plan
+# key is not silently pointed at the global host, where it 401s.
+#
+# The argument is the provider table's own default; it is returned unchanged
+# unless something concrete says otherwise, so the table stays the one place a
+# new provider is declared.
+if [ "$MODE" = "--base-url" ]; then
+  DEFAULT="${3:-}"
+  [ -n "$DEFAULT" ] || { echo "credential.sh: --base-url needs the provider's default URL" >&2; exit 64; }
+  case "$PROVIDER" in
+    zai) OVERRIDE="${ZAI_BASE_URL:-}" ;;
+    xai) OVERRIDE="${XAI_BASE_URL:-}" ;;
+    *)   OVERRIDE="" ;;
+  esac
+  if [ -n "$OVERRIDE" ]; then
+    printf '%s\n' "$OVERRIDE"
+    exit 0
+  fi
+  HOST=""
+  if [ "$PROVIDER" = zai ]; then
+    case "$(chelper_field plan)" in
+      "") ;;
+      glm_coding_plan_global) HOST="https://api.z.ai" ;;
+      # Every other plan value the helper writes is a mainland one; it sends
+      # those to open.bigmodel.cn (dist/lib/claude-code-manager.js).
+      *) HOST="https://open.bigmodel.cn" ;;
+    esac
+    if [ -z "$HOST" ] && [ -r "$CLAUDE_SETTINGS" ]; then
+      HOST="$(python3 -c 'import json,sys
+from urllib.parse import urlsplit
+try:
+    env = (json.load(open(sys.argv[1])).get("env") or {})
+except Exception:
+    sys.exit(0)
+u = urlsplit(str(env.get("ANTHROPIC_BASE_URL") or ""))
+if u.hostname in ("api.z.ai", "open.bigmodel.cn", "dev.bigmodel.cn"):
+    print(f"{u.scheme}://{u.netloc}")' "$CLAUDE_SETTINGS" 2>/dev/null || true)"
+    fi
+  fi
+  if [ -z "$HOST" ]; then
+    printf '%s\n' "$DEFAULT"
+  else
+    # Keep the table's path, swap only the host it hangs off.
+    printf '%s\n' "$HOST$(printf '%s' "$DEFAULT" | sed -E 's#^[a-z]+://[^/]*##')"
+  fi
+  exit 0
+fi
 
 FOUND=""; SOURCE=""; TRIED=""
 note() { TRIED="$TRIED
@@ -63,6 +126,14 @@ fi
 # is ever modified, and each source is guarded so we cannot pick up a
 # credential that belongs to a different service.
 if [ "$PROVIDER" = zai ]; then
+  # z.ai's own installer writes the key it verified into its config. Reading it
+  # is what makes `npx @z_ai/coding-helper` count as having set this skill up
+  # too — the vendor's documented path should not need a second paste.
+  note "$CHELPER_CONFIG (api_key, written by npx @z_ai/coding-helper)"
+  if [ -z "$FOUND" ]; then
+    take "$(chelper_field api_key)" "$CHELPER_CONFIG"
+  fi
+
   note "$CRUSH_CONFIG (providers.zai.api_key)"
   if [ -z "$FOUND" ] && [ -r "$CRUSH_CONFIG" ]; then
     take "$(python3 -c 'import json,sys
