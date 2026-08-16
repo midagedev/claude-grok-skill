@@ -21,6 +21,30 @@ Everything below details the rows of this table.
 
 ### One-shot task (default form)
 
+**Launch through `bin/grok-run.sh`, not by assembling the raw block below**
+(field incident 2026-08-17: a hand-assembled `nohup bash -c` launch broke on
+nested quoting, died silently into `/dev/null`, wrote no sentinel, and never
+appeared in the status line — two watchers waited on files that would never
+exist):
+
+```bash
+nohup bash <skill-dir>/bin/grok-run.sh \
+  --cwd <dir> --spec <scratch>/spec.md --log <scratch>/grok-<track>.ndjson \
+  --label <track> --done-marker DONE-<TRACK> \
+  [--git-profile strict|readonly-plus|trusted] > <scratch>/launch.out 2>&1 &
+```
+
+It registers the round in `runs.sh` (the status line sees it), verifies grok
+actually started (ndjson must grow within 30s, else exit 69 out loud), writes
+the same `<log>.rc` sentinel shape as the zai launcher — including
+`done_marker=found|absent`, with rc downgraded to 70 when a clean exit lacks
+the marker in the final report — and encodes the git-policy profiles below so
+they stop being copy-pasted into shells. Read the round's report with
+`bin/last-report.sh <log>`.
+
+The raw recipe below remains the reference for what grok-run.sh does inside
+(and for the rare case that needs a flag it doesn't carry).
+
 Write the spec to a scratch file and pass it with `--prompt-file`. Run long
 tasks in the background. **Completion is proven by the sentinel file the
 recipe writes after grok exits — never by your harness's task notification**,

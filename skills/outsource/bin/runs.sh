@@ -8,6 +8,7 @@
 #   runs.sh start  --pid N --provider P --harness H [...]   -> prints run id
 #   runs.sh finish <run-id> --rc N [--session S] [--model-actual M]
 #   runs.sh prune [--keep-seconds N]  drop finished records older than N
+#   runs.sh dismiss <run-id>          drop one record you have read (not running)
 #
 # list/line/json take `--owner <session-id>` and `--owner-claude-pid <pid>`,
 # which restrict the output to rounds launched from one Claude Code session.
@@ -336,6 +337,26 @@ EOF
   echo "pruned $n"
 }
 
+# Prune keeps orphans on purpose — they are the only trace of a round that
+# died, and a timer must not delete evidence before anyone reads it. But
+# "until read" needs a verb for *after* reading, or an acknowledged orphan
+# haunts the status line forever (field case: two fabricated records from a
+# test draft wore ⚠ in every session's status line for a day). Dismiss is
+# that verb: explicit, one record, and never a running round — a live pid is
+# work, not residue.
+cmd_dismiss() {
+  [ $# -ge 1 ] || { echo "runs.sh dismiss: needs a run id" >&2; exit 64; }
+  local id="$1" f="$RUNS_DIR/$1.run"
+  [ -f "$f" ] || { echo "runs.sh dismiss: no such run: $id" >&2; exit 65; }
+  read_record "$f" || { rm -f "$f"; echo "dismissed $id (unreadable record)"; return 0; }
+  if [ "$(state_of)" = running ]; then
+    echo "runs.sh dismiss: $id is running (pid $R_PID alive) — a live round is work, not residue" >&2
+    exit 66
+  fi
+  rm -f "$f"
+  echo "dismissed $id"
+}
+
 cmd_list() {
   local any=0 f st el idle idle_col
   while IFS= read -r f; do
@@ -475,6 +496,7 @@ case "${1:-list}" in
   line)   shift; parse_filter_flags "$@"; cmd_line "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
   json)   shift; parse_filter_flags "$@"; cmd_json "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
   list)   shift; parse_filter_flags "$@"; cmd_list "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
-  -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
-  *) echo "runs.sh: unknown subcommand: $1 (list|line|json|start|finish|prune)" >&2; exit 64 ;;
+  dismiss) shift; cmd_dismiss "$@" ;;
+  -h|--help) sed -n '2,46p' "$0"; exit 0 ;;
+  *) echo "runs.sh: unknown subcommand: $1 (list|line|json|start|finish|prune|dismiss)" >&2; exit 64 ;;
 esac
