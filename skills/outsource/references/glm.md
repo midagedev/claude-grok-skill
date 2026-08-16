@@ -62,9 +62,16 @@ cat ~/.claude/skills/outsource/references/spec-preamble.md \
 
 ~/.claude/skills/outsource/bin/outsource-run.sh \
   --cwd /absolute/path/to/worktree --spec $SP/spec.md \
+  --label <what-this-track-is-for> \
   --config-dir $SP/glm-cfg-<track> --log $SP/glm-<track>.log
 # add --harness crush to run the same spec on the other harness
 ```
+
+`--label` is the track's purpose, and it is worth typing every time: with
+one spec file per scratch dir — the layout above — the derived default is
+the same word for every parallel round, which is exactly when you need to
+tell them apart. `api-migration`, `test-backfill`, `docs-sweep`; not
+`track-a`.
 
 Run with `run_in_background: true`; collect the log on completion. The last
 stdout line is `SESSION <id>` — pass it back with `--session <id>` for a
@@ -80,7 +87,43 @@ refuses to launch below an N% floor on the plan's tightest window (exit 66);
 `--no-vision-check` overrides the image-spec refusal (exit 65);
 `--allow-agent` (crush only) re-enables sub-agent tools and **weakens the
 git ban** (hooks fire only on top-level tool calls) — only for tasks with
-zero repository-state risk.
+zero repository-state risk; `--label <name>` names the track in the run
+registry; `--max-seconds N` kills the harness at N seconds (exit 124).
+
+**Rounds run long, and that is usually fine.** Measured on ten delivered
+rounds: 13 minutes to **1h50m**, duration tracking message count almost
+linearly (66 messages / 13m … 848 messages / 1h50m). Neither harness can
+stop itself — `crush run` has no turn or time limit in its flag set at all,
+and this `claude` CLI has no `--max-turns`, only `--max-budget-usd` at
+Anthropic's prices, which says nothing about a z.ai plan — but that is an
+argument for watching, not for cutting: a time limit truncates the working
+rounds and misses the stuck ones.
+
+`runs.sh` therefore measures **output, not duration**. It flags `⏳` when a
+running round has written nothing for ten minutes, reading the trail each
+harness leaves in its own `--config-dir`: crush's `data/crush.db-wal` and
+`data/logs/crush.log`, the claude-code harness's `claude/projects/**.jsonl`.
+Note that the `--log` file is not that trail — the claude-code harness
+writes it once, at the end, so a healthy round shows an empty log for its
+whole life.
+
+`--max-seconds N` does hard-kill at N seconds (exit 124, whole process
+group). It has no default and should not get one: the kill lands mid-edit.
+Use it only where losing the round is acceptable up front.
+
+**Mid-round visibility.** Every launch registers itself, so a background
+round is visible while it runs and not only once it reports:
+
+```bash
+~/.claude/skills/outsource/bin/runs.sh          # state, provider, harness, elapsed
+~/.claude/skills/outsource/bin/runs.sh line     # one line, for a status line
+~/.claude/skills/outsource/bin/runs.sh json     # for a script
+```
+
+The state worth knowing is `orphan`: started, pid gone, no exit code — the
+round died without finishing, and nothing else on the machine still
+remembers it existed. `bin/statusline.sh` renders the same registry into
+Claude Code's status line, next to the plan quotas.
 
 Before launching, lint the assembled spec — wrong premises are the measured
 tax on delegation:

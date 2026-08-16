@@ -99,6 +99,53 @@ Then invoke the backend exactly as its reference describes:
   sentinel), `bin/git-guard.sh` PreToolUse hook (works on both harnesses),
   z.ai model-mapping trap, measured behavior profile.
 
+## Knowing what is in flight
+
+A delegated round is invisible between "I launched it" and "it reported",
+and that gap is where a lead loses track of which tracks are still alive,
+how long they have been running, and which one died without a report:
+
+```bash
+<skill-dir>/bin/runs.sh          # every round: state, provider, harness, elapsed
+<skill-dir>/bin/runs.sh line     # the same, compressed to one line
+```
+
+`running` and `done` are the states you expect; `orphan` — started, pid
+gone, no exit code — is the one worth acting on, because nothing else on
+the machine still remembers that round existed. `ps` cannot report it: a
+killed round leaves no process at all.
+
+**A long round is not a stuck round — never cut one to find out.** Measured
+across ten delivered rounds: 13 minutes to 1h50m, with duration tracking
+message count almost linearly. Long rounds were long because there was a
+lot of work, so a time limit truncates a working delegate mid-edit and a
+90-minute round is not, by itself, evidence of anything.
+
+What separates the two is output, not duration. Both harnesses write
+continuously into their own data directory, so `runs.sh` reports an `IDLE`
+column and flags `⏳` only when a *running* round has written nothing for
+ten minutes (`OUTSOURCE_RUN_STALL`):
+
+```
+▶refshot zai·crush 1h41m        # 101 minutes in, still writing — leave it
+⏳frozen  zai·crush 22m ⋯14m     # silent for 14 of those 22 — go look
+```
+
+A stall is a reason to read the log, not to kill anything; a round often
+recovers. `--max-seconds N` on the launcher does hard-kill at N (exit 124)
+and exists only for rounds whose loss you accept in advance — it is not the
+answer to "this is taking a while".
+
+**Label every launch with what the track is for.** `--label api-migration`,
+not `--label track-a` and not nothing: the listing is only useful in
+parallel, and in parallel the derived default collides (this skill writes
+every track's spec to `<scratch>/spec.md`). Colliding labels render as
+`name`, `name#2` — a warning that the round you are looking at cannot be
+identified, not a naming scheme.
+
+`<skill-dir>/bin/statusline.sh` puts that line, and the plan quotas from
+`bin/quota.sh`, into Claude Code's status line. See the README.
+
 ## What the lead always does (backend-independent)
 
 1. **Delegate "done" ≠ done.** Read `git diff` yourself and re-run the

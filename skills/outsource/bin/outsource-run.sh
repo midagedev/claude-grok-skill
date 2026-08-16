@@ -6,8 +6,8 @@
 #   outsource-run.sh --cwd <dir> --spec <file> [--provider zai|xai]
 #                    [--harness crush|claude-code] [--log <file>]
 #                    [--session <id>] [--model <id>] [--config-dir <dir>]
-#                    [--allow-agent] [--no-vision-check]
-#                    [--require-quota <N%>]
+#                    [--label <name>] [--allow-agent] [--no-vision-check]
+#                    [--require-quota <N%>] [--max-seconds <N>]
 #
 # The model is the point; the harness is how it is driven headlessly:
 #
@@ -35,17 +35,52 @@
 # (rc/finished/harness/provider/model_requested/model_actual/session). The
 # harness's own lifecycle is not completion proof; the sentinel is.
 #
+# Every launch also registers itself with bin/runs.sh, so a round is visible
+# *while it runs* and not only once it reports: `runs.sh` lists which tracks
+# are alive, on which provider and harness, and for how long. The sentinel
+# answers "how did it end" for one round; the registry answers "what is
+# happening right now" across all of them, including the rounds that died
+# without ending (started, pid gone, no rc — `runs.sh` calls those orphans).
+# --label is what the track is *for*, and parallel rounds are the reason it
+# exists: three tracks that all read "spec" tell you nothing. Pass it. The
+# derived default is a fallback, not a naming scheme — see default_label().
+# Registry failures never fail a round: this is bookkeeping, not a gate.
+#
+# ---- on rounds that run long ------------------------------------------------
+# Neither harness can stop itself: `crush run` exposes no turn or time limit
+# at all, and this `claude` CLI exposes only --max-budget-usd, priced at
+# Anthropic's rates and therefore wrong for every provider in the table
+# above. Measured on ten delivered rounds, duration ran 13 minutes to 1h50m
+# and tracked message count almost linearly (66 messages / 13m … 848
+# messages / 1h50m).
+#
+# That measurement is the argument AGAINST a time limit, not for one: those
+# rounds were long because there was a lot of work, and cutting one at an
+# hour truncates a working delegate mid-edit for no reason. The default
+# posture here is therefore never to interrupt. What the launcher does
+# instead is record where the round leaves a live trail, so `runs.sh` can
+# distinguish "still writing" from "silent for ten minutes" — a stall is
+# visible without anything being killed.
+#
+# --max-seconds N remains available as an explicit escape hatch, for rounds
+# whose loss is acceptable up front: at N seconds the harness's process
+# group gets SIGTERM, then SIGKILL ten seconds later, and the round finishes
+# as rc 124 (the `timeout(1)` convention) in both the sentinel and the run
+# registry. It has no default and should not be given one — the kill lands
+# mid-edit and the partial tree is the lead's to review.
+#
 # Exit codes: 64 usage (unknown flag/provider/harness, bare --model on crush)
 #             65 vision-spec refusal (provider cannot see images)
 #             66 --require-quota floor missed, or not evaluable
 #             69 harness CLI missing
 #             70 model-identity assertion failed (mismatch or unverifiable)
+#            124 --max-seconds ceiling hit; the harness was killed
 #              1 missing credential
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CWD=""; SPEC=""; LOG=""; SESSION=""; CONFIG_DIR=""; ALLOW_AGENT=0; NO_VISION_CHECK=0
-REQUIRE_QUOTA=""
+REQUIRE_QUOTA=""; LABEL=""; MAX_SECONDS=""
 HARNESS="${OUTSOURCE_HARNESS:-claude-code}"
 PROVIDER="${OUTSOURCE_PROVIDER:-zai}"
 MODEL="${GLM_DELEGATE_MODEL:-}"
@@ -62,9 +97,11 @@ while [ $# -gt 0 ]; do
     --harness) HARNESS="$2"; shift 2 ;;
     --provider) PROVIDER="$2"; shift 2 ;;
     --config-dir) CONFIG_DIR="$2"; shift 2 ;;
+    --label) LABEL="$2"; shift 2 ;;
     --allow-agent) ALLOW_AGENT=1; shift ;;
     --no-vision-check) NO_VISION_CHECK=1; shift ;;
     --require-quota) REQUIRE_QUOTA="$2"; shift 2 ;;
+    --max-seconds) MAX_SECONDS="$2"; shift 2 ;;
     *) echo "unknown flag: $1" >&2; exit 64 ;;
   esac
 done
@@ -103,6 +140,14 @@ provider_field() {  # <name> <column> -> value on stdout; empty when unknown
 
 [ -n "$(provider_field "$PROVIDER" "$T_URL")" ] || {
   echo "unknown provider: $PROVIDER (known: $(provider_names | tr '\n' ' '))" >&2; exit 64; }
+
+# Validated here, not only at the dispatch below, so a usage error is caught
+# before the run registry records a round that was never going to launch.
+# The dispatch keeps its own arm as unreachable defence.
+case "$HARNESS" in
+  claude-code|crush) ;;
+  *) echo "--harness must be claude-code or crush, got: $HARNESS" >&2; exit 64 ;;
+esac
 
 CONFIG_DIR="${CONFIG_DIR:-${TMPDIR:-/tmp}/outsource-glm-cfg}"
 mkdir -p "$CONFIG_DIR"
@@ -146,10 +191,72 @@ if [ -n "$REQUIRE_QUOTA" ]; then
   esac
 fi
 
+if [ -n "$MAX_SECONDS" ] && ! [[ "$MAX_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "--max-seconds wants a positive whole number of seconds, got: $MAX_SECONDS" >&2; exit 64
+fi
+
 SID=""
 MODEL_ACTUAL=""
 
+# ---- wall-clock watchdog ---------------------------------------------------
+# `timeout(1)` is GNU coreutils and absent from a stock macOS, so the ceiling
+# is built here. Two details make it actually stop a harness:
+#
+#   * `set -m` before backgrounding puts the harness in its own process
+#     group, so the signal can be sent to the group (`kill -- -PGID`). The
+#     harnesses spawn children — a TERM to the shell alone leaves the model
+#     CLI running and the round only *looks* stopped.
+#   * The watchdog reports through a file, not a variable: it runs in a
+#     subshell and cannot assign to this one, and "the harness exited 143"
+#     must be distinguishable from "we killed it".
+TIMED_OUT_FLAG=""
+WATCHDOG_PID=""
+
+watchdog_start() {  # <pid of the backgrounded harness>
+  [ -n "$MAX_SECONDS" ] || return 0
+  TIMED_OUT_FLAG="$CONFIG_DIR/.timed-out.$$"
+  rm -f "$TIMED_OUT_FLAG"
+  local pid="$1"
+  (
+    sleep "$MAX_SECONDS"
+    kill -0 "$pid" 2>/dev/null || exit 0
+    : > "$TIMED_OUT_FLAG"
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+    sleep 10
+    kill -0 "$pid" 2>/dev/null || exit 0
+    kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
+  ) &
+  WATCHDOG_PID=$!
+}
+
+watchdog_stop() {  # returns 0 when the ceiling fired
+  [ -n "$WATCHDOG_PID" ] && { kill "$WATCHDOG_PID" 2>/dev/null; wait "$WATCHDOG_PID" 2>/dev/null; }
+  WATCHDOG_PID=""
+  [ -n "$TIMED_OUT_FLAG" ] && [ -f "$TIMED_OUT_FLAG" ] && { rm -f "$TIMED_OUT_FLAG"; return 0; }
+  return 1
+}
+
+timed_out_note() {  # one message, both harnesses
+  echo "outsource: --max-seconds $MAX_SECONDS reached; the $HARNESS harness was killed mid-round (exit 124). Whatever it had already written to $CWD is still there — review the tree, and treat the round as unfinished." >&2
+}
+
+# ---- run registry ----------------------------------------------------------
+# bin/runs.sh owns the record format; this file only says "a round started"
+# and "it ended with rc". Bookkeeping must never be able to fail a round, so
+# every call here is best-effort.
+RUNS_SH="$SKILL_DIR/bin/runs.sh"
+RUN_ID=""
+
+runs_note_finish() {  # <rc> — idempotent; the EXIT trap and finish() both call it
+  [ -n "$RUN_ID" ] || return 0
+  local id="$RUN_ID"
+  RUN_ID=""
+  "$RUNS_SH" finish "$id" --rc "$1" --session "$SID" --model-actual "$MODEL_ACTUAL" \
+    >/dev/null 2>&1 || true
+}
+
 finish() {  # <exit-code> — sentinel + SESSION line + exit, both harnesses
+  runs_note_finish "$1"
   if [ -n "$LOG" ]; then
     if ! printf 'rc=%s\nfinished=%s\nharness=%s\nprovider=%s\nmodel_requested=%s\nmodel_actual=%s\nsession=%s\n' \
         "$1" "$(date -u +%FT%TZ)" "$HARNESS" "$PROVIDER" "$MODEL" "$MODEL_ACTUAL" "$SID" \
@@ -160,6 +267,58 @@ finish() {  # <exit-code> — sentinel + SESSION line + exit, both harnesses
   echo "SESSION ${SID:-unknown}"
   exit "$1"
 }
+
+# Register once the round is actually going to be attempted — after the
+# vision and quota guards, before the harness is dispatched. A guard that
+# refuses to launch has not started a round, and recording one would make the
+# registry lie about what is running.
+# The EXIT trap covers the paths finish() does not: a missing CLI, a killed
+# launcher, an unexpected error under `set -e`. Without it those rounds would
+# sit in the registry as "running" forever.
+
+# What to call this track when --label was not given. The spec's basename is
+# the obvious guess and the wrong one on its own: this skill's own documented
+# invocation writes every track's spec to `$SP/spec.md`, one scratch dir per
+# track, so three parallel rounds would all register as "spec" — the exact
+# case the label is for. A generic basename therefore defers to the directory
+# holding it, which is where the track name actually lives.
+default_label() {
+  local base parent
+  base="$(basename -- "${SPEC%.*}")"
+  case "$base" in
+    spec|task|prompt|input|round|delegate)
+      parent="$(basename -- "$(dirname -- "$SPEC")")"
+      case "$parent" in
+        ''|.|/|tmp|temp|scratch|sp|specs) ;;   # no more specific than the basename
+        *) base="$parent" ;;
+      esac ;;
+  esac
+  printf '%s' "$base"
+}
+
+# Where this round leaves a live trail, so `runs.sh` can tell a round that is
+# working from one that is stuck without ever interrupting either. Both
+# harnesses write continuously into their own data directory — crush into
+# `crush.db-wal` and `logs/crush.log` every few seconds, the claude-code
+# harness into `projects/**.jsonl` every turn. Neither path is the `--log`
+# file: the claude-code harness writes that only once, at the end, so a
+# perfectly healthy round shows an empty log for its entire life.
+# Both are derived from CONFIG_DIR, which is already fixed at this point.
+case "$HARNESS" in
+  claude-code) PROGRESS_DIR="$CONFIG_DIR/claude/projects" ;;
+  crush)       PROGRESS_DIR="$CONFIG_DIR/data" ;;
+  *)           PROGRESS_DIR="" ;;
+esac
+
+trap 'runs_note_finish "$?"' EXIT
+RUN_ID="$("$RUNS_SH" start \
+  --pid "$$" \
+  --label "${LABEL:-$(default_label)}" \
+  --provider "$PROVIDER" \
+  --harness "$HARNESS" \
+  --model "${MODEL:-$(provider_field "$PROVIDER" "$T_MODEL")}" \
+  --cwd "$CWD" --spec "$SPEC" --log "$LOG" \
+  --progress-dir "$PROGRESS_DIR" 2>/dev/null)" || RUN_ID=""
 
 case "$HARNESS" in
 claude-code)
@@ -209,14 +368,27 @@ PY
   # such line ahead of the JSON makes the whole log unparseable.
   ERRLOG="${LOG:+$LOG.err}"
   set +e
+  set -m   # own process group, so the watchdog can signal the whole tree
   if [ -n "$SESSION" ]; then
     (cd "$CWD" && claude -p --resume "$SESSION" --permission-mode bypassPermissions \
-      --output-format json) < "$SPEC" > "${LOG:-/dev/stdout}" 2> "${ERRLOG:-/dev/stderr}"
+      --output-format json) < "$SPEC" > "${LOG:-/dev/stdout}" 2> "${ERRLOG:-/dev/stderr}" &
   else
     (cd "$CWD" && claude -p --permission-mode bypassPermissions \
-      --output-format json) < "$SPEC" > "${LOG:-/dev/stdout}" 2> "${ERRLOG:-/dev/stderr}"
+      --output-format json) < "$SPEC" > "${LOG:-/dev/stdout}" 2> "${ERRLOG:-/dev/stderr}" &
   fi
+  HARNESS_PID=$!
+  set +m
+  watchdog_start "$HARNESS_PID"
+  wait "$HARNESS_PID"
   RC_EXIT=$?
+  if watchdog_stop; then
+    # A killed round has a truncated log, so the model-identity assertion
+    # would fail on it and report a mismatch that never happened. The
+    # ceiling is the finding here; say so and stop.
+    timed_out_note
+    set -e
+    finish 124
+  fi
   set -e
 
   # One read-only pass over the JSON log and the session transcript: session
@@ -412,14 +584,28 @@ option progress false
 RC
 
   set +e
+  set -m   # own process group, so the watchdog can signal the whole tree
   if [ -n "$SESSION" ]; then
     CRUSH_GLOBAL_CONFIG="$CONFIG_DIR" crush run -q -c "$CWD" -D "$DATA_DIR" -s "$SESSION" < "$SPEC" \
-      > "${LOG:-/dev/stdout}" 2>&1
+      > "${LOG:-/dev/stdout}" 2>&1 &
   else
     CRUSH_GLOBAL_CONFIG="$CONFIG_DIR" crush run -q -c "$CWD" -D "$DATA_DIR" < "$SPEC" \
-      > "${LOG:-/dev/stdout}" 2>&1
+      > "${LOG:-/dev/stdout}" 2>&1 &
   fi
+  HARNESS_PID=$!
+  set +m
+  watchdog_start "$HARNESS_PID"
+  wait "$HARNESS_PID"
   RC_EXIT=$?
+  if watchdog_stop; then
+    timed_out_note
+    # The session id is still worth recovering: crush wrote it, and it is
+    # what a follow-up round would resume from.
+    SID="$(CRUSH_GLOBAL_CONFIG="$CONFIG_DIR" crush session last --json -c "$CWD" -D "$DATA_DIR" 2>/dev/null \
+           | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("meta") or d).get("id",""))' 2>/dev/null || true)"
+    set -e
+    finish 124
+  fi
   set -e
 
   # crush logs carry no model-identity field (no modelUsage equivalent), so
