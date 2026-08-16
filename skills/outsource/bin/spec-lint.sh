@@ -142,7 +142,7 @@ COMMENT = re.compile(r"<!--.*?-->", re.S)
 CREATE_OPEN = re.compile(
     r"^\s*(?:[-*+]\s+)?(?:#+\s*)?(?:\*\*)?"
     r"(?:create|creates?d?|new files?|files? to create|to create|add files?)"
-    r"(?:\*\*)?\s*:\s*$", re.I)
+    r"(?:\*\*)?\s*(?:\([^)]*\))?\s*:\s*$", re.I)
 CREATE_INLINE = re.compile(
     r"^\s*(?:[-*+]\s+)?(?:#+\s*)?(?:\*\*)?"
     r"(?:create|new files?|files? to create|to create|add files?)"

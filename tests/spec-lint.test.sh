@@ -83,6 +83,18 @@ New files:
 EOF
 ok "New files: opens a block too" 0 "1 to-be-created exempt" "missing"
 
+run <<'EOF'
+Create (vitest files, beside their modules):
+- `pkg/brandnew.go`
+EOF
+ok "a parenthetical before the colon still opens a block" 0 "1 to-be-created exempt" "missing"
+
+run <<'EOF'
+Create (the parser described below) `pkg/absent.go` and follow it:
+read it carefully.
+EOF
+ok "a parenthetical inline sentence is not an opener" 1 "missing: pkg/absent.go" "-"
+
 # ---- the exemption's own new finding ----------------------------------------
 
 run <<'EOF'
