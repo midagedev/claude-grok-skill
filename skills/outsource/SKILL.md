@@ -146,6 +146,21 @@ identified, not a naming scheme.
 `<skill-dir>/bin/statusline.sh` puts that line, and the plan quotas from
 `bin/quota.sh`, into Claude Code's status line. See the README.
 
+**Retrieving the report.** When the sentinel says the round finished, do not
+hand-write a JSON extractor (measured 2026-08-17: four rounds, four
+throwaway Python scripts, two log shapes):
+
+```bash
+<skill-dir>/bin/last-report.sh <log>              # the delegate's final report
+<skill-dir>/bin/last-report.sh <log> --max-chars 4000
+```
+
+It understands both shapes — a claude-code `run.log` (last `result` event)
+and a grok CLI ndjson (text deltas after the last tool event) — and exits 65
+when the log holds no report at all, which is what a died-mid-run round
+looks like. It prints the delegate's words; **completion evidence is still
+the `.rc` sentinel**, never the report's existence.
+
 ## What the lead always does (backend-independent)
 
 1. **Delegate "done" ≠ done.** Read `git diff` yourself and re-run the
