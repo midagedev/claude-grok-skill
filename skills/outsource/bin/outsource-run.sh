@@ -119,17 +119,14 @@ if [ "$NO_VISION_CHECK" -eq 0 ] && [ "$(provider_field "$PROVIDER" "$T_VISION")"
   exit 65
 fi
 
-# ---- plan quota ------------------------------------------------------------
-# bin/quota.sh reads the provider's own plan API. Two uses here: refuse to
-# start a round the plan cannot finish, and bracket the round so its real
-# cost is a measured credit delta rather than the log's Anthropic-priced
-# `total_cost_usd` (which is wrong for every provider in the table).
+# ---- plan quota (pre-flight only) ------------------------------------------
+# bin/quota.sh reads the provider's own plan API. It is used here for one
+# thing: refusing to start a round the plan cannot finish. It is deliberately
+# NOT used to price a round. Plan quota is a plan-wide counter — concurrent
+# rounds and other sessions move it too — so a before/after delta around one
+# round measures the machine, not the round. The per-round figure that IS
+# attributable is the token count in the log's `usage`.
 QUOTA_SH="$SKILL_DIR/bin/quota.sh"
-
-quota_json() {  # compact JSON on stdout; empty string on any failure
-  [ -x "$QUOTA_SH" ] || return 0
-  "$QUOTA_SH" --provider "$PROVIDER" --json 2>/dev/null || true
-}
 
 if [ -n "$REQUIRE_QUOTA" ]; then
   [ -x "$QUOTA_SH" ] || { echo "outsource: --require-quota needs $QUOTA_SH to be present and executable" >&2; exit 64; }
@@ -152,48 +149,13 @@ if [ -n "$REQUIRE_QUOTA" ]; then
   esac
 fi
 
-# Only bracket real, logged rounds — an unlogged one-off is not worth four
-# extra API calls, and a quota failure must never block a launch.
-QUOTA_BEFORE=""
-[ -z "$LOG" ] || QUOTA_BEFORE="$(quota_json)"
-
 SID=""
 MODEL_ACTUAL=""
-QUOTA_SPENT=""
-
-quota_delta() {  # before-json after-json -> "5h=+1234 1w=+1234" on stdout
-  python3 - "$1" "$2" <<'PY' 2>/dev/null || true
-import json, sys
-try:
-    a = json.loads(sys.argv[1])
-    b = json.loads(sys.argv[2])
-except Exception:
-    sys.exit(0)
-before = {w.get("label"): w for w in a.get("windows") or []}
-parts = []
-for w in b.get("windows") or []:
-    p = before.get(w.get("label"))
-    if not p:
-        continue
-    # Prefer real counts; fall back to the percentage for providers that
-    # expose no counts at all (grok). Never mix the two in one figure.
-    if isinstance(w.get("consumed"), (int, float)) and isinstance(p.get("consumed"), (int, float)):
-        parts.append("%s=%+d" % (w["label"], w["consumed"] - p["consumed"]))
-    elif isinstance(w.get("percentage"), (int, float)) and isinstance(p.get("percentage"), (int, float)):
-        parts.append("%s=%+.1f%%" % (w["label"], w["percentage"] - p["percentage"]))
-print(" ".join(parts))
-PY
-}
 
 finish() {  # <exit-code> — sentinel + SESSION line + exit, both harnesses
-  if [ -n "$LOG" ] && [ -n "$QUOTA_BEFORE" ]; then
-    QUOTA_AFTER="$(quota_json)"
-    [ -z "$QUOTA_AFTER" ] || QUOTA_SPENT="$(quota_delta "$QUOTA_BEFORE" "$QUOTA_AFTER")"
-    [ -z "$QUOTA_SPENT" ] || echo "outsource: this round spent $QUOTA_SPENT on provider '$PROVIDER' (measured against the plan's own quota API — unlike total_cost_usd, this is the real charge)" >&2
-  fi
   if [ -n "$LOG" ]; then
-    if ! printf 'rc=%s\nfinished=%s\nharness=%s\nprovider=%s\nmodel_requested=%s\nmodel_actual=%s\nsession=%s\nquota_spent=%s\n' \
-        "$1" "$(date -u +%FT%TZ)" "$HARNESS" "$PROVIDER" "$MODEL" "$MODEL_ACTUAL" "$SID" "$QUOTA_SPENT" \
+    if ! printf 'rc=%s\nfinished=%s\nharness=%s\nprovider=%s\nmodel_requested=%s\nmodel_actual=%s\nsession=%s\n' \
+        "$1" "$(date -u +%FT%TZ)" "$HARNESS" "$PROVIDER" "$MODEL" "$MODEL_ACTUAL" "$SID" \
         > "$LOG.rc"; then
       echo "outsource: warning: could not write sentinel $LOG.rc" >&2
     fi
@@ -361,8 +323,10 @@ EOF
   SID="$A_SESSION"
   TRANSCRIPT_NOTE="$A_SOURCE"
 
-  # C4: cost honesty — token counts in `usage` are real; `total_cost_usd` is
-  # Claude Code's Anthropic-priced estimate, not what the provider charges.
+  # Cost honesty. The token counts in `usage` are this round's and are the
+  # only per-round figure worth quoting; `total_cost_usd` is Claude Code's
+  # Anthropic-priced estimate, not what the provider charges. Plan credits
+  # are deliberately absent here — they are plan-wide, not per-round.
   if [ "$A_ASSERT" != "nolog" ] && [ "$A_ASSERT" != "unreadable" ]; then
     echo "outsource: usage ${A_USAGE:-absent}; total_cost_usd=${A_COST:-absent} is Claude Code's Anthropic-priced estimate, not what provider '$PROVIDER' charges" >&2
   fi

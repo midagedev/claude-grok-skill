@@ -60,6 +60,17 @@ cat <skill-dir>/references/spec-preamble.md \      # shared rules — every clau
     <scratch>/task.md > <scratch>/spec.md
 ```
 
+**Which preamble.** `spec-preamble-core.md` is a short substitute for
+`spec-preamble.md`. Measured (GLM-5.3 on the claude-code harness, 5 issues,
+same task spec, full preamble vs none): removing the preamble entirely cost
+16-37% fewer output tokens and never lost a gate — but the self-verification
+section went 5/5 to 0/5 and "what I could not do" went 5/5 to 1/5, so a round
+whose contract could not be met came back looking met. FAIL-first survived at
+5/5 either way, because the *task spec* demands it. The core file carries
+back exactly the part that vanished. Use the full preamble when the round
+touches shared code or a contract you are unsure is satisfiable; use core for
+mechanical rounds where you want the delegate's context small.
+
 Write the per-task spec from `references/spec-template.md`, and read
 `references/spec-authoring.md` before writing it — the quality bundle and
 the lead-side checks there are where delegated quality is actually won.
@@ -105,11 +116,25 @@ Then invoke the backend exactly as its reference describes:
 4. **Look for artifact/code divergence** the change introduced, and check
    the tracker: closed tickets carry commit refs, discovered defects got
    filed as their own items.
-5. Anything visual gets **one blind vision verdict before commit** (fresh
+5. **Check your own spec for clauses that cannot both hold** — before you
+   launch, not after. Measured: a spec of ours asked for a rule that would
+   overwrite user edits *and* for user edits to stay protected. Three of four
+   delegates implemented it as written and shipped a data-loss bug with every
+   gate green; only the Claude arm refused and designed around it. The
+   delegate-side rule for this already exists in the preamble and did not
+   fire, so this one is yours: list the contract clauses, and ask whether any
+   pair is jointly unsatisfiable.
+6. **Verify negative premises one path at a time.** "This file does not
+   exist" is the class of claim a spec linter cannot check. Measured: a
+   two-pattern `ls` in zsh printed nothing because the *second* glob matched
+   nothing and aborted the command, so a file that existed was written into a
+   spec as absent. Same family as the `tail` trap below: a shell behavior
+   that turns a failed check into a confident answer.
+7. Anything visual gets **one blind vision verdict before commit** (fresh
    judge per round; numeric context first, narrowed question, "do not
    judge" list). Never mix look-core changes with mechanical work in one
    spec or commit.
-6. Commits, pushes, merges, deploys: **lead-only**, on every backend.
+8. Commits, pushes, merges, deploys: **lead-only**, on every backend.
 
 ### Review checklist (where delegated defects actually leak)
 

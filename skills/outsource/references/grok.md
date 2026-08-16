@@ -89,8 +89,14 @@ GIT_POLICY_FLAGS="--deny 'Bash(git commit*)' --deny 'Bash(git push*)' \
   --deny 'Bash(git add*)' --deny 'Bash(git rebase*)' \
   --deny 'Bash(git reset*)' --deny 'Bash(git merge*)' \
   --deny 'Bash(git cherry-pick*)' --deny 'Bash(git tag*)' \
-  --deny 'Bash(git worktree*)' --deny 'Bash(gh pr create*)' \
+  --deny 'Bash(git worktree add*)' --deny 'Bash(git worktree remove*)' \
+  --deny 'Bash(git worktree prune*)' --deny 'Bash(gh pr create*)' \
   --deny 'Bash(gh pr merge*)' --deny 'Bash(gh repo *)'"
+# Note the worktree denies are per-subcommand. A blanket `git worktree*`
+# also blocks `git worktree list`, which every spec asks for as the first
+# line of the report — measured 2026-08-16: two grok rounds had to work
+# around their own evidence requirement and said so. Read-only git is
+# deliberately open; keep it that way.
 
 # 2) readonly-plus (paranoid): the old blanket ban. Use for parallel tracks
 #    with tight file boundaries where even a git read prompt is unwanted.

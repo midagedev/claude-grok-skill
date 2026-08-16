@@ -69,14 +69,12 @@ bin/outsource-run.sh --require-quota 15 …            # 66 if the plan is too l
 **After the round**
 
 - **Model-identity assertion** (exit 70). z.ai maps an unqualified `claude-*` request onto its plan default, so a round can silently run a model you didn't ask for. The launcher reads the model that answered from the per-turn `message.model` in the session transcript — *not* from `modelUsage`, which was measured to echo the **requested** id and therefore can never prove a match. No transcript means "unverifiable", which fails too.
-- **A completion sentinel** `<log>.rc` with `rc`, `finished`, `harness`, `provider`, `model_requested`, `model_actual`, `session`, `quota_spent`. The harness's own lifecycle is not completion proof; this file is.
-- **The round's real price**, as a credit delta measured against the plan's own quota API before and after. The `total_cost_usd` in the log is an Anthropic-priced estimate and is wrong for every provider here.
+- **A completion sentinel** `<log>.rc` with `rc`, `finished`, `harness`, `provider`, `model_requested`, `model_actual`, `session`. The harness's own lifecycle is not completion proof; this file is.
+- **A cost line with the token counts from the log's `usage`** — the only per-round figure worth quoting. The `total_cost_usd` beside it is an Anthropic-priced estimate and is wrong for every provider here.
 
-```
-outsource: this round spent 5h=+9 1w=+9 on provider 'zai'
-```
+Plan credits are deliberately *not* reported per round. A plan quota is a plan-wide counter that concurrent rounds and other sessions move too, so a before/after delta around one round measures the machine, not the round (measured: six rounds running at once make every one of their deltas an upper bound). Quota is a **pre-flight** signal — which provider this session should use, and whether to start at all.
 
-`bin/quota.sh` also stands alone, for either subscription backend:
+`bin/quota.sh` reads it, for either subscription backend:
 
 ```
 $ quota.sh
@@ -144,7 +142,51 @@ Different repo (a Go + Svelte product with gated CI), different method: no blind
   3. **Silent hazard avoidance.** GLM's `sh`/`set -eu` choice happened to dodge a SIGPIPE failure mode that Opus measured (nondeterministic exit 141 under `pipefail`) and designed around — luck and judgment are indistinguishable in review. → robustness-sensitive scripts must name the failure modes their options handle.
 - GLM's own wins inside those rounds: it dug up a documented `GADAK_NO_OPEN`-style env var the Opus arm missed and used it for an unmodified end-to-end smoke, and its FAIL-first proof ran in **both directions** (add *and* remove).
 
-**The honest summary across both series:** a cheap backend is a trustworthy implementation arm **when the spec writes the contract down**; the losses live in the judgment the spec leaves open. That is why most of this repo is spec-authoring material.
+### A three-way round: Opus 5 vs grok-4.6 vs GLM-5.3, 14 rounds on 5 real tickets
+
+The third series, and the one that changed this skill the most. Five open tickets from a Go + Svelte product (a sync perf bug, a CLI upgrade bug, a new CLI verb, an auth-onboarding bug, a UI ordering bug), each sent to every arm as the **same task spec** in its own git worktree. Fourteen rounds. Every one of them passed `build` / `vet` / the affected suite when the lead re-ran the gates himself.
+
+Because they all passed, the interesting differences are not in the gates.
+
+**Where the arms agreed.** On a stated fact that is simply wrong, everyone catches it. The sync-bug spec carried the reporter's hypothesis ("the watermark window never narrows on a quiet tick") plus one instruction: *don't trust this diagnosis — confirm or refute it with an intervention.* Opus removed the window slack (`overlap 5min → 0`) and the symptom didn't move; grok pushed the watermark an hour past every page so the query matched nothing and got zero fetches. Opposite manipulations, same refutation: the cause was not the watermark but a **missing decision** between a search hit and the body fetch. Both arms then built the same shape of fix — one owner for "does this page need its body?" — instead of tuning the constant.
+
+**Where they split: a contract that could not be satisfied.** The upgrade-bug spec asked for two things that cannot both hold — treat a file carrying `name: gadak` as ours and overwrite it, *and* keep protecting files the user authored. A user who customises our skill keeps that line; it's what makes the skill load. grok **noticed** and wrote it down ("a user who customized the body but left `name: gadak` is treated as ours and overwritten") and implemented it as specified anyway. Both GLM arms did the same without noticing. Opus refused the rule, argued why the two clauses are jointly unsatisfiable, and designed around it (an install receipt with a content hash, plus a deliberately *frozen* digest table for pre-receipt installs, with a test asserting it stays frozen).
+
+The same shape repeated on the auth ticket, where the contract asked to distinguish three failure cases the available evidence cannot distinguish. All three arms reached that conclusion. Opus classified the one case that *is* distinguishable, flagged the rest as a partial miss, and put a self-check in the message; the GLM arms concatenated every hint into every error — which satisfies the letter of "show the user a string" while quietly failing the contract's point.
+
+So: **a wrong fact gets caught by everyone; an impossible requirement gets caught by one.** The failure mode is not a red gate, it's a green one with an unnamed gap — the most expensive kind to review, because the lead reads the diff but cannot see an omission that was never mentioned.
+
+Three of the four spec defects in this series were the lead's own, and the delegates found them. One was a negative claim ("this file does not exist") that came from a two-pattern `ls` in zsh: the second glob matched nothing, aborted the command, and printed nothing — so an existing file went into a spec as absent. That is now a lead-checklist item, next to the `tail` trap.
+
+### Does the preamble earn its length? (the same 5 tickets, GLM-5.3, full vs none)
+
+A controlled A/B inside the series: same task spec, same model, same harness, the shared preamble either prepended or omitted entirely.
+
+| Ticket | output tokens, none ÷ full | input tokens, full → none |
+|---|---|---|
+| new CLI verb | 0.63× | 298k → 139k |
+| sync perf | 0.78× | 146k → 112k |
+| UI ordering | 0.84× | 107k → 95k |
+| auth onboarding | 0.86× | 166k → 96k |
+| CLI upgrade | 0.94× | 81k → 78k |
+
+Cheaper in all five, fewer turns in four, and **not once worse on a gate**. On the sync bug the no-preamble arm even caught a second-order trap grok missed (a page skipped by the new gate must still be reachable by the comments-only pass) and wrote the regression test for it.
+
+But the cost isn't where the preamble was earning its keep:
+
+| | full preamble | no preamble |
+|---|---|---|
+| FAIL-first evidence | 5/5 | **5/5** |
+| self-verification section | 5/5 | **0/5** |
+| "what I could not do" | 5/5 | **1/5** |
+
+FAIL-first survives without the preamble because the *task spec* demands it. What disappears is disclosure — and that is exactly how the auth round came back looking complete when it wasn't. So the preamble was buying honest reporting, not better code.
+
+Hence `references/spec-preamble-core.md`: the short file carries back precisely the part that vanished, and nothing else. The full preamble stays for rounds touching shared code or a contract you're unsure is satisfiable.
+
+Two things this experiment did **not** establish: which individual sections of the full preamble are dead weight (only all-or-nothing was measured), and any per-round cost in plan credits — a plan quota is a plan-wide counter that concurrent rounds move too, so those numbers were discarded as uninterpretable.
+
+**The honest summary across all three series:** a cheap backend is a trustworthy implementation arm **when the spec writes the contract down**; the losses live in the judgment the spec leaves open — and the sharpest version of that is a contract which cannot be satisfied at all. That is why most of this repo is spec-authoring material, and why the lead checklist now includes reading your own spec for clauses that fight each other.
 
 Where it settled (our production assignment table):
 
@@ -164,13 +206,14 @@ Where it settled (our production assignment table):
 | `references/grok.md` | grok backend: flag combo, git-safety profiles, sentinel completion proof, vision-verdict recipe, image generation, visibility/intervention |
 | `references/glm.md` | GLM-5.3 backend: harness picker, per-harness quirks, the z.ai model-mapping trap, measured behavior profile |
 | `references/spec-preamble.md` | Shared rules prepended to every spec — every clause from a real incident |
+| `references/spec-preamble-core.md` | The short substitute: the disclosure half, which is the part measured to vanish without it |
 | `references/glm-preamble.md` | GLM runtime delta (no images, hooks not flags, evidence rules §6–§11) |
 | `references/spec-authoring.md` | The quality bundle, the per-task template walkthrough, lead-side spec checks |
 | `references/spec-template.md` | Per-task spec skeleton: contracts, depth requirements, verification commands |
 | `bin/outsource-run.sh` | The launcher: provider table, harness picker (`--harness claude-code\|crush`), isolated config per track, session resume, vision/quota guards, model-identity assertion, completion sentinel |
 | `bin/git-guard.sh` | The git-ban `PreToolUse` hook, one file for both harnesses' calling conventions (29 regression cases) |
 | `bin/spec-lint.sh` | Pre-launch spec check: unresolvable paths and out-of-range `path:line` citations |
-| `bin/quota.sh` | Plan quota for `zai` and `grok`, human or `--json`, with `--require-window` as a gate |
+| `bin/quota.sh` | Plan quota for `zai` and `grok` — a pre-flight signal, human or `--json`, with `--require-window` as a gate |
 | `scripts/grok-progress.py` · `scripts/grok-round-status.py` | Compress a grok NDJSON stream into one-line progress events; judge round state by sentinel |
 
 Safety default on both backends: repository-state git stays with the lead — grok via enumerated deny-profiles, GLM via the command-string hook above.

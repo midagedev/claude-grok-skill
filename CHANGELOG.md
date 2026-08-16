@@ -2,6 +2,32 @@
 
 ## 0.7.0 — 2026-08-16 — guardrails with exit codes
 
+Shipped alongside a 14-round, three-way comparison (Opus 5 / grok-4.6 /
+GLM-5.3, same spec, five real tickets, isolated worktrees) — written up in
+the README. Four changes below come straight out of it.
+
+- **`references/spec-preamble-core.md`** — a short substitute for the full
+  preamble. Measured: dropping the preamble entirely was 16-37% cheaper in
+  output tokens and never lost a gate, but self-verification went 5/5 to 0/5
+  and "what I could not do" went 5/5 to 1/5. FAIL-first survived at 5/5
+  either way, because the task spec demands it. The core file carries back
+  the disclosure half and nothing else.
+- **grok's strict git profile no longer blocks `git worktree list`.** The
+  blanket `git worktree*` deny also blocked the read every spec asks for as
+  the first line of the report; two rounds had to work around their own
+  evidence requirement. The denies are now per-subcommand
+  (`add`/`remove`/`prune`).
+- **Lead checklist: read your own spec for clauses that cannot both hold.**
+  A spec of ours asked for a rule that would overwrite user edits *and* for
+  user edits to stay protected; three of four delegates implemented it and
+  shipped a data-loss bug with every gate green. The delegate-side rule for
+  this already existed in the preamble and did not fire, so the check moved
+  to the lead.
+- **Lead checklist: verify negative premises one path at a time.** A
+  two-pattern `ls` in zsh printed nothing because the second glob matched
+  nothing and aborted the command, so an existing file was written into a
+  spec as absent. Same family as the `tail` trap.
+
 Renamed `bin/glm-run.sh` → **`bin/outsource-run.sh`**: the launcher is no
 longer GLM-specific. All references updated; the flag surface is unchanged
 apart from the additions below.
@@ -32,12 +58,16 @@ apart from the additions below.
     weekly sat at 81.7% remaining while the 5-hour sat at 83.8%.
 - **`--require-quota N`** on the launcher refuses to start a round the plan
   cannot finish (exit 66), and fails closed when it cannot be evaluated.
-- **The round's real price.** Every logged round is bracketed with a quota
-  snapshot and reports the credit delta (`5h=+9 1w=+9`) — the log's
-  `total_cost_usd` is Anthropic-priced and wrong for every provider here.
+- **Cost honesty.** The launcher prints the round's token counts from the
+  log's `usage` — the only per-round figure worth quoting — and says plainly
+  that `total_cost_usd` is an Anthropic-priced estimate. Plan credits are
+  deliberately *not* reported per round: the quota is a plan-wide counter
+  that concurrent rounds and other sessions move too, so a before/after
+  delta around one round measures the machine, not the round. Quota stays a
+  pre-flight signal.
 - **Completion sentinel `<log>.rc`** for both harnesses: `rc`, `finished`,
-  `harness`, `provider`, `model_requested`, `model_actual`, `session`,
-  `quota_spent`. The harness's lifecycle is not completion proof.
+  `harness`, `provider`, `model_requested`, `model_actual`, `session`. The
+  harness's lifecycle is not completion proof.
 - **`bin/spec-lint.sh`** — pre-launch spec check for unresolvable paths and
   out-of-range `path:line` citations, the class behind five measured wrong
   premises in one session. Bare filenames are only checked when they carry a

@@ -35,10 +35,12 @@ Also measured: `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` are genuinely
 honoured by `claude -p` (an invalid token 401s, so a green run really did go
 to z.ai, not to your own subscription), `CLAUDE_CONFIG_DIR` isolates the run
 from the user's own Claude Code, and `total_cost_usd` in the log is Claude
-Code's Anthropic-priced estimate — **not** what the z.ai plan charges. For
-the real figure, the launcher brackets every logged round with
-`bin/quota.sh` and reports the credit delta (`5h=+9 1w=+9`), which also
-lands in the `<log>.rc` sentinel as `quota_spent`.
+Code's Anthropic-priced estimate — **not** what the z.ai plan charges. The
+per-round figure that is actually attributable is the token count in
+`usage`, which the launcher prints. Plan credits are not per-round: the
+quota is a plan-wide counter that concurrent rounds and other sessions move
+too, so `bin/quota.sh` is a **pre-flight** signal (`--require-quota`), not
+an accounting mechanism.
 
 The shared implementer preamble (`references/spec-preamble.md`) carries the
 backend-agnostic rules; `references/glm-preamble.md` is the GLM-runtime
