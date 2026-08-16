@@ -124,6 +124,45 @@ Read `pkg/absent.go`.
 EOF
 ok "a heading ends the block" 1 "missing: pkg/absent.go" "-"
 
+# ---- the exemption is by path, not by position ------------------------------
+# A spec names the file it is creating more than once — in the whitelist, then
+# again in the completion criteria and the test section. Exempting only the
+# declaration line moved the cry-wolf defect a page down instead of fixing it.
+
+run <<'EOF'
+Create:
+- `pkg/brandnew.go`
+
+## Tests
+
+Put the cases in `pkg/brandnew.go` and run them.
+EOF
+ok "a later mention of a created file is exempt" 0 "2 to-be-created exempt" "missing"
+
+run <<'EOF'
+This round builds the parser in `pkg/brandnew.go`.
+
+Create:
+- `pkg/brandnew.go`
+EOF
+ok "a mention before the declaration is exempt too" 0 "2 to-be-created exempt" "missing"
+
+run <<'EOF'
+Create:
+- `pkg/exists.go`
+
+Then run `pkg/exists.go` again.
+EOF
+ok "already-exists is reported once, not per mention" 1 "already-exists" "-"
+
+run <<'EOF'
+Create:
+- `pkg/brandnew.go`
+
+Then run `pkg/exists.go` and read `pkg/absent.go`.
+EOF
+ok "an unrelated missing file is still loud beside them" 1 "missing: pkg/absent.go" "missing: pkg/brandnew.go"
+
 # The sentence that would be catastrophic to misread as a block opener: it
 # ends in a colon and starts with the word, but has prose after it.
 run <<'EOF'

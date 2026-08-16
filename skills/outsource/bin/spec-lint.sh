@@ -38,6 +38,13 @@
 # spec and the tree then disagree about what the round is for. The count of
 # exemptions is printed on the ok line, so the suppression stays visible.
 #
+# Known limit, and not a bug to fix: a path inside a command that sets its own
+# root (`npx vitest run --root web src/lib/x.test.ts`, `make -C dir`) is
+# resolved from --root and the spec's directory, not from that command's base,
+# so it can report missing for a file that exists. Teaching the linter every
+# tool's cwd flag would cost more precision than it buys; write such paths
+# repo-relative in the spec instead.
+#
 # Never checked (templates are not claims): URLs and www.* domains, bare
 # domains (no known extension), tokens containing "<" or ">" or $VAR/${VAR},
 # globs with * or ?, "..."-abbreviated paths, and anything inside a
@@ -275,48 +282,65 @@ for spec in specs:
     to_create = creation_lines(lines)
     sp = [(m.start(), m.end()) for m in SPAN.finditer(whole)]
     sp += [(m.start(), m.end()) for m in COMMENT.finditer(whole)]
-    off = 0
-    for lineno, line in enumerate(lines, 1):
-        base, off = off, off + len(line)
-        for pos, raw in tokens(line):
-            if is_template(raw):
-                continue
-            tok = raw.strip(EDGE)
-            if not tok or is_template(tok):
-                continue
-            if any(a <= base + pos < b for a, b in sp):
-                continue  # inside a <...> template span
-            m = CITE.match(tok)
-            if m and ("/" in m.group(1) or has_ext(m.group(1))):
-                # A :line citation is an explicit claim, bare name or not.
-                path, n = m.group(1), int(m.group(2))
-            elif "/" in tok and has_ext(tok):
-                path, n = tok, None
-            else:
-                # Bare filename, no citation — prose naming a file, not a
-                # path claim. See the header note on precision.
-                continue
-            key = (lineno, tok)
-            if key in seen:
-                continue
-            seen.add(key)
-            resolved, exists = resolve(path, bases)
-            if lineno in to_create:
-                exempt_count += 1
-                if exists:
-                    print(f"{spec}:{lineno}: already-exists: {tok} "
-                          f"(spec says create it; resolved: {resolved})")
-                    spec_findings += 1
-                continue
-            if not exists:
-                print(f"{spec}:{lineno}: missing: {tok} (resolved: {resolved})")
+
+    def walk():
+        """(lineno, tok, path, n) for every reference in the spec, in order."""
+        off = 0
+        for lineno, line in enumerate(lines, 1):
+            base, off = off, off + len(line)
+            for pos, raw in tokens(line):
+                if is_template(raw):
+                    continue
+                tok = raw.strip(EDGE)
+                if not tok or is_template(tok):
+                    continue
+                if any(a <= base + pos < b for a, b in sp):
+                    continue  # inside a <...> template span
+                m = CITE.match(tok)
+                if m and ("/" in m.group(1) or has_ext(m.group(1))):
+                    # A :line citation is an explicit claim, bare name or not.
+                    yield lineno, tok, m.group(1), int(m.group(2))
+                elif "/" in tok and has_ext(tok):
+                    yield lineno, tok, tok, None
+                # Otherwise: a bare filename with no citation — prose naming a
+                # file, not a path claim. See the header note on precision.
+
+    # Pre-pass, so the exemption is by path and not by position. A spec is free
+    # to name a file it is creating before it declares the creation — in an
+    # intro paragraph, in a heading — and reporting those was the same
+    # cry-wolf defect one line higher up.
+    created_paths = set()
+    for lineno, _tok, path, _n in walk():
+        if lineno in to_create:
+            created_paths.add(resolve(path, bases)[0])
+
+    for lineno, tok, path, n in walk():
+        key = (lineno, tok)
+        if key in seen:
+            continue
+        seen.add(key)
+        resolved, exists = resolve(path, bases)
+        if resolved in created_paths:
+            # A file the spec is creating, at its declaration or anywhere else
+            # it is named — the completion criteria, a test section, prose.
+            # Declaring it once is the claim; every later mention is the same
+            # claim, and reporting those was this exemption's own bug, one
+            # line further down the page.
+            exempt_count += 1
+            if exists and lineno in to_create:
+                print(f"{spec}:{lineno}: already-exists: {tok} "
+                      f"(spec says create it; resolved: {resolved})")
                 spec_findings += 1
-            elif n is not None and not os.path.isdir(resolved):
-                total = line_count(resolved)
-                if n < 1 or n > total:
-                    print(f"{spec}:{lineno}: line-out-of-range: {tok} "
-                          f"(file has {total} lines)")
-                    spec_findings += 1
+            continue
+        if not exists:
+            print(f"{spec}:{lineno}: missing: {tok} (resolved: {resolved})")
+            spec_findings += 1
+        elif n is not None and not os.path.isdir(resolved):
+            total = line_count(resolved)
+            if n < 1 or n > total:
+                print(f"{spec}:{lineno}: line-out-of-range: {tok} "
+                      f"(file has {total} lines)")
+                spec_findings += 1
     if spec_findings == 0 and not quiet:
         # The exemption count is printed rather than kept quiet: a
         # suppression nobody can see is how a linter starts lying.

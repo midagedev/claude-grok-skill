@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **The to-be-created exemption was by line, so it moved the cry-wolf defect
+  one page down instead of fixing it.** A spec names the file it is creating
+  more than once — in the whitelist, again in the completion criteria, again in
+  a test section — and only the declaration was exempt. Measured on the next
+  real spec written after 0.9.0: five findings, four of them the same three
+  files named a second time. The exemption is now by resolved path, collected
+  in a pre-pass so a mention *above* the declaration counts too, and
+  `already-exists` still reports once at the declaration rather than at every
+  mention. Four more test cases, FAIL-first against 0.9.0's version.
+- The header now names a limit rather than leaving it to be rediscovered as a
+  bug: a path inside a command that sets its own root (`vitest --root web
+  src/…`, `make -C dir`) resolves from `--root` and the spec's directory, so it
+  can read as missing. Teaching the linter every tool's cwd flag costs more
+  precision than it buys.
+
 ## 0.9.0 — 2026-08-16 — the delegate is not the lead, and read-only git stays read-only
 
 - **`bin/git-guard.sh` blocked a read-only call it was written to allow.**
