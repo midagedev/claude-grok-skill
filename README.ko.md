@@ -210,6 +210,62 @@ $ bin/quota.sh --provider grok
 1w window: exact counts not exposed by this API, 98.0% used / 2.0% left, resets at 15:13 (in 6h 36m)
 ```
 
+## 띄워 둔 라운드 보기
+
+위임 라운드는 백그라운드에서 돌기 때문에, "띄웠다"와 "보고가 왔다" 사이에는 아무것도 보이지 않습니다. 그래서 모든 실행은 자기 자신을 기록하고, `bin/runs.sh`가 그 기록을 읽어 줍니다:
+
+```
+$ bin/runs.sh
+STATE    LABEL            PROV   HARNESS  ELAPSED  SPEC
+running  api-migration    zai    crush       12m   /tmp/sp/spec-api.md
+running  test-backfill    zai    cc           4m   /tmp/sp/spec-tests.md
+orphan   docs-sweep       xai    crush     1h07m   /tmp/sp/spec-docs.md
+         started but never finished — pid 48120 is gone; log=/tmp/sp/docs.log
+```
+
+이게 있는 이유는 `orphan`입니다. 죽임을 당했거나 머신이 잠들어 끊긴 라운드는 **프로세스를 아예 남기지 않습니다** — 그래서 `ps` grep은 "깨끗이 끝났다"와 "한 시간 전에 워크트리를 쥔 채 죽었다"에 똑같이 아무것도 답하지 않습니다. 시작했는데 끝나지 않았다는 상태는 기록만이 담을 수 있습니다. 스크립트용으로는 `bin/runs.sh json`.
+
+### 오래 도는 라운드와 멈춘 라운드는 다릅니다
+
+두 하네스 모두 스스로를 멈추지 못합니다 — `crush run`은 플래그 집합에 턴·시간 제한이 아예 없고, 이 `claude` CLI에는 `--max-turns`가 없으며 `--max-budget-usd` 하나뿐인데 그건 Anthropic 가격이라 z.ai 플랜에는 의미가 없습니다. 그래서 시간 상한을 걸고 싶어지는데, 배달된 라운드 열 건 실측이 그게 틀린 처방이라고 말합니다: 13분에서 **1h50m**까지 걸렸고 소요시간은 메시지 수와 거의 선형이었습니다(66개/13분 … 848개/1h50m). **긴 라운드는 일이 많아서 길었습니다.** 시간으로 끊으면 그 라운드들을 자르면서, 정작 3분째에 갇힌 라운드는 놓칩니다.
+
+그래서 레지스트리는 **시간이 아니라 출력**을 잽니다. 두 하네스 모두 자기 데이터 디렉터리에 계속 쓰기 때문에, `runs.sh`는 `IDLE` 열을 내고 실행 중인 라운드가 10분간 아무것도 안 썼을 때만 `⏳`를 붙입니다(`OUTSOURCE_RUN_STALL`):
+
+```
+▶refshot zai·crush 1h41m        # 101분째, 1초 전에 썼음 — 건드리지 말 것
+⏳frozen  zai·crush 22m ⋯14m     # 22분 중 14분이 침묵 — 로그를 볼 것
+```
+
+이 둘이 실제 판별점입니다. 경과시간 규칙이었다면 **멀쩡한 101분짜리를 경고하고 갇힌 쪽은 침묵**했을 조합입니다. `--log` 파일은 신호가 아닙니다 — claude-code 하네스는 그걸 맨 끝에 한 번만 쓰므로 정상 라운드도 평생 빈 로그로 보입니다. 흔적은 crush면 `data/crush.db-wal`·`data/logs/crush.log`, claude-code면 `claude/projects/**.jsonl`입니다.
+
+멈춤은 로그를 읽을 이유이지 무언가를 죽일 이유가 아닙니다. `bin/outsource-run.sh --max-seconds N`은 N초에 하드 킬합니다(프로세스 그룹 전체에 SIGTERM 후 SIGKILL, 센티넬·레지스트리 양쪽에 exit 124, 후속 라운드가 이어받을 수 있게 세션 id는 회수). 기본값은 없고 앞으로도 두지 않습니다 — kill은 편집 도중에 떨어지니까요. 그 라운드를 잃어도 된다고 미리 판단한 경우에만 쓰십시오.
+
+`--label`은 그 트랙이 **무엇을 위한 것인가**이고, 실행마다 적어 줄 값어치가 있습니다. 이 목록이 값을 하는 건 병렬일 때인데, 유도된 기본값이 무너지는 지점이 정확히 거기이기 때문입니다: 이 스킬이 문서화한 배치는 트랙마다 디렉터리 하나에 `<scratch>/spec.md`를 쓰므로, basename 기반 라벨이면 `spec`이 세 번 뜹니다. 그래서 기본값은 스펙을 담은 디렉터리(보통 그 트랙의 스크래치 디렉터리)로 물러나고, 그래도 충돌하면 `name`, `name#2`로 그려집니다 — 작명 규칙이 아니라 "지금 보는 라운드를 식별할 수 없다"는 경고입니다.
+
+## 스테이터스라인
+
+`bin/statusline.sh`는 위의 전부를 Claude Code 스테이터스라인에 올립니다 — 이 세션을 멈추는 한도, 다음 라운드를 멈추는 플랜 쿼터, 그리고 지금 돌고 있는 것:
+
+```
+opus │ you@example.com │ CTX 12% │ 5H 8%/3h20m │ 1W 38%/4d2h
+z.ai 29%/6d4h │ grok 98%/2h19m │ 🛠2 ▶api zai·crush 12m  ▶tests zai·cc 4m │ repo (main)
+```
+
+`~/.claude/settings.json`에 한 번 넣습니다:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "bash ~/.claude/skills/outsource/bin/statusline.sh"
+}
+```
+
+모든 한도는 토큰 하나입니다 — `이름 쓴%/리셋까지`. 앞은 얼마나 썼는지, 뒤는 언제 돌아오는지. 둘 중 하나만으로는 판단이 안 서기 때문에 여기에 막대는 없습니다: 막대는 앞 절반에 서른 칸을 쓰고 뒤 절반은 아예 못 그립니다. 경보는 색이 담습니다(50 미만 초록, 80 미만 노랑, 80 이상 빨강). `grok 98%/2h19m`은 한눈에 *거의 다 썼지만 오래 안 남았다*로 읽힙니다.
+
+렌더당 약 120ms인 이유는 렌더 경로에서 쿼터 API를 절대 부르지 않기 때문입니다. 백그라운드 갱신이 `OUTSOURCE_STATUSLINE_TTL`초(기본 180)마다 작은 캐시를 쓰고, 락으로 묶여 있어 렌더가 몰려도 fetch는 하나입니다. 아직 측정 전이면 `…`, 오래돼 굳었으면 앞에 `~`가 붙습니다 — 어느 쪽도 조용히 `0%`로 그려지지 않습니다.
+
+전부 침묵으로 degrade합니다: z.ai 키가 없거나, grok에 로그인한 적이 없거나, 기록된 라운드가 없으면 그 구간은 그냥 사라집니다. 쿼터 줄 전체를 빼려면 `OUTSOURCE_STATUSLINE_PROVIDERS=""`, 하나만 남기려면 `"zai"`처럼 지정합니다. `jq`와 `python3`이 필요합니다.
+
 ## 안에 무엇이 있나
 
 | 파일 | 용도 |
@@ -224,6 +280,8 @@ $ bin/quota.sh --provider grok
 | `bin/git-guard.sh` | git 금지 `PreToolUse` 훅. 파일 하나가 두 하네스 처리 (회귀 29케이스) |
 | `bin/credential.sh` · `bin/setup-key.sh` | 키 **와 호스트** 해석의 단일 소유자(환경변수 → 이 스킬의 0600 저장소 → z.ai 공식 설치본·`crush`가 이미 써 둔 자리), 그리고 그 대화형 절반 |
 | `bin/spec-lint.sh` · `bin/quota.sh` | 발사 전 스펙 검사; `--require-window`로 게이트화되는 플랜 쿼터 |
+| `bin/runs.sh` | 실행 레지스트리: 어떤 라운드가 무엇 위에서 얼마나 오래 살아 있는지 — 그리고 시작만 하고 끝나지 않은 것 |
+| `bin/statusline.sh` | Claude Code 스테이터스라인: 세션 한도, 플랜 쿼터, 진행 중 라운드 — 렌더 경로 밖에서 캐시 |
 | `scripts/grok-progress.py` · `scripts/grok-round-status.py` | grok NDJSON 스트림을 진행 이벤트로 압축; 센티넬로 라운드 상태 판정 |
 
 ## 품질 번들

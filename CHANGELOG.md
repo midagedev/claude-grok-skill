@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.8.0 — 2026-08-16 — a round you can see while it runs
+
+- **`bin/runs.sh`** — a registry of delegated runs. Every launch records what
+  it launched (label, provider, harness, model, spec, log, pid, start time)
+  and, on the way out, how it ended. `runs.sh` lists it back with elapsed
+  time; `runs.sh line` compresses it to one line; `runs.sh json` is the same
+  data for scripts. The state that motivates the whole file is **orphan** —
+  started, pid gone, no exit code. A killed round leaves no process at all,
+  so `ps` answers the same nothing for "finished cleanly" and "died an hour
+  ago holding your worktree"; started-but-never-finished is a state only a
+  written record can hold. Records are `key=value` lines, the same shape as
+  the launcher's `<log>.rc` sentinel, and this script is their only writer.
+- **`bin/outsource-run.sh --label <name>`** says what the track is *for*.
+  Parallel rounds are the only time the listing matters, and they are also
+  where a derived label fails: this skill's documented layout writes every
+  track's spec to `<scratch>/spec.md`, one dir per track, so a basename
+  default would register three rounds as `spec`. The default falls back to
+  the directory holding the spec, a label that still collides renders as
+  `name`, `name#2`, and both are fallbacks — the docs now ask for a real
+  label at launch. Registration happens after the vision and
+  quota guards and before the harness dispatch — a guard that refuses to
+  launch has not started a round — and an `EXIT` trap covers the paths the
+  normal completion path does not, so a killed launcher cannot leave a round
+  reading "running" forever. Registry failures never fail a round.
+- **Stall detection, measured on output rather than elapsed time.** Neither
+  harness can stop itself — `crush run` exposes no turn or time limit in its
+  flag set at all, and the `claude` CLI has no `--max-turns`, only
+  `--max-budget-usd` at Anthropic's prices, which says nothing about a z.ai
+  plan. The obvious response is a time limit, and ten local rounds read back
+  from the harness session stores say it is the wrong one: they ran 13
+  minutes to **1h50m**, duration tracking message count almost linearly (66
+  messages / 13m … 848 messages / 1h50m). Long rounds were long because
+  there was a lot of work; cutting at an hour truncates a working delegate
+  mid-edit and still misses a round that wedged at minute three.
+
+  So the registry records where each harness leaves a live trail —
+  `data/crush.db-wal` and `data/logs/crush.log` for crush,
+  `claude/projects/**.jsonl` for the claude-code harness, deliberately *not*
+  the `--log` file, which that harness writes once at the end — and reports
+  an `IDLE` column. `⏳` fires only when a running round has written nothing
+  for ten minutes (`OUTSOURCE_RUN_STALL`). Verified against both halves at
+  once: a real 1h41m round that had written a second earlier stayed `▶`,
+  while a live pid whose directory had been silent 30 minutes flagged. An
+  elapsed-time rule would have inverted both.
+- **`--max-seconds N`** hard-kills at N seconds — SIGTERM then SIGKILL to
+  the harness's whole *process group*, because a signal to the shell alone
+  leaves the model CLI running and only looks like a stop. The round
+  finishes as exit 124 in both the sentinel and the registry, with the
+  session id still recovered so a follow-up can resume. No default, and it
+  should not get one: the kill lands mid-edit. It is an escape hatch for
+  rounds whose loss is accepted up front, not the answer to a slow round.
+- **`bin/statusline.sh`** — a Claude Code status line built from the two
+  scripts above plus `bin/quota.sh`: model, account, context, the 5-hour and
+  weekly Claude windows, the z.ai and grok plan windows, and the rounds in
+  flight. Every budget is one token, `NAME used%/until-it-resets`, because
+  neither half is actionable without the other — which is also why there is
+  no bar. Quota APIs are never called on the render path: a lock-guarded
+  background refresh writes a small cache (default 180 s), and unmeasured
+  shows `…` rather than a `0%` that would read like good news.
+  Silence means one specific thing — "this backend is not set up here" — so
+  a failed refresh never erases the last good numbers: they carry forward
+  prefixed `~`. Found by shipping it: an expired grok sign-in made the whole
+  segment disappear, reporting a backend that had just stopped working
+  exactly like one that was never configured. ~120 ms per render.
+
 ## 0.7.0 — 2026-08-16 — guardrails with exit codes
 
 - **`bin/credential.sh` + `bin/setup-key.sh`** — key resolution gets a single
