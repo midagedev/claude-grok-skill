@@ -98,6 +98,22 @@ case "$PROFILE" in
 esac
 if [ "$RESEARCH" -eq 1 ]; then
   GIT_FLAGS+=(--deny Write --deny Edit --disallowed-tools write,search_replace)
+  # A research round has no write tool, but a spec that asks for a report
+  # *file* reads as writable work — measured 2026-08-17: the model looped
+  # "writing the report" for 301 turns ($5.77) with nothing to write with.
+  # The runner owns the contradiction: tell the model up front, in the spec
+  # itself, that the final message is the only deliverable channel.
+  # mktemp needs the Xs at the END of the template (macOS mktemp treats a
+  # suffix after them as literal — first call "works" by creating that
+  # literal name, every later call fails on File exists).
+  RESEARCH_SPEC="$(mktemp "${TMPDIR:-/tmp}/grok-spec.XXXXXX")"
+  {
+    printf '> [runner notice — research mode] 이 라운드에는 파일 쓰기 도구가 없다.\n'
+    printf '> 스펙이 산출물을 파일로 요구하더라도 파일은 만들 수 없으며, 모든 산출물은\n'
+    printf '> **최종 메시지 본문**으로 제출하라. 쓰기 시도를 반복하지 말 것.\n\n'
+    cat "$SPEC"
+  } > "$RESEARCH_SPEC"
+  SPEC="$RESEARCH_SPEC"
 fi
 
 # A session id is pinned once (-s) and only resumed afterwards (-r): grok

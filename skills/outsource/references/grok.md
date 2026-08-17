@@ -13,7 +13,8 @@ references/spec-authoring.md.
 |---|---|---|---|
 | Implementation, single track | strict | — | file whitelist · numeric contract · verification commands · **every CLAUDE.md covering the targets** |
 | Implementation, parallel / risky / registers gates | strict (or trusted for WIP commits) | lead-created worktree `--cwd` | + track boundary, per-package gates, copy-artifacts-out rule |
-| Investigation / census / report | strict (git reads help) | `--research` belt; subagents stay off | narrow questions · premise-check invitation · large output → files per section, not stdout |
+| Investigation / census (answer in the final message) | strict (git reads help) | `--research` belt; subagents stay off | narrow questions · premise-check invitation · **deliverable = final message, never a file** (the belt denies Write; the runner injects a notice, but do not spec a report file) |
+| Report whose deliverable IS a file | strict, **no `--research`** | whitelist the one report path in the spec | measured 2026-08-17: a research-belt round specced to write a report looped "writing it" for 301 turns — the belt and the deliverable contradicted |
 | Vision verdict | readonly-plus | `--research`; `-- --json-schema '<schema>'` for the verdict | 3-element briefing (numeric context first · narrowed question · "do not judge" list); fresh SID, retire after one verdict |
 | Image/asset generation | strict | worktree `--cwd` | copy-out path for `~/.grok/sessions/...` outputs · JPEG/matting plan |
 
@@ -108,10 +109,14 @@ isolation, not as enforcement.
 
 ### Read-only investigation profile (research / census / audit tasks)
 
-For investigation-only delegations (web research, code census, report
-writing — no tree changes wanted), add the write-block belt on top of a git
-profile with `grok-run.sh --research` (`--deny Write --deny Edit
---disallowed-tools write,search_replace`).
+For investigation-only delegations (web research, code census — no tree
+changes wanted), add the write-block belt on top of a git profile with
+`grok-run.sh --research` (`--deny Write --deny Edit
+--disallowed-tools write,search_replace`). Under this belt the deliverable
+is the **final message**: the runner prepends a notice saying so, because a
+spec that asks for a report *file* contradicts the belt (2026-08-17: 301
+turns of "writing the report" with no write tool). If the deliverable must
+be a file, drop `--research` and whitelist that one path instead.
 
 Field-tested: five consecutive investigation runs with this belt +
 `--permission-mode bypassPermissions` produced zero tree changes. The part
