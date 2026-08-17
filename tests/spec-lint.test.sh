@@ -183,5 +183,32 @@ read `pkg/absent.go` for the existing convention.
 EOF
 ok "prose beginning with Create is not an opener" 1 "missing: pkg/absent.go" "-"
 
+# The markers were English-only, so a spec written in Korean declared its new
+# files just as clearly and got the guaranteed findings this exemption exists
+# to prevent — the feature had never fired for those specs (measured
+# 2026-08-18: four specs, six findings, every one a file the round was being
+# sent to create).
+run <<'EOF'
+새 파일:
+- `pkg/brandnew.go`
+EOF
+ok "a Korean create block exempts its paths" 0 "1 to-be-created exempt" "missing"
+
+run <<'EOF'
+신규 파일:
+- `pkg/brandnew.go`
+
+본문에서 다시 언급: `pkg/brandnew.go` 를 만든다.
+EOF
+ok "a later Korean mention is exempt too" 0 "2 to-be-created exempt" "missing"
+
+# Same precision bar as the English side: a colon-ending sentence that merely
+# begins with the word is prose, not an opener.
+run <<'EOF'
+새 파일을 만들기 전에 확인할 것:
+`pkg/absent.go` 의 기존 관례를 읽어라.
+EOF
+ok "Korean prose beginning with the word is not an opener" 1 "missing: pkg/absent.go" "-"
+
 printf '\nspec-lint: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

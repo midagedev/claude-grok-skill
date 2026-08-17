@@ -139,13 +139,23 @@ COMMENT = re.compile(r"<!--.*?-->", re.S)
 # disagree about what this round is: the lead is about to send someone to
 # create a file that is already there, and either the path is stale or the
 # work is done. That is a real finding, and it is only visible here.
+# The markers are matched in the spec's own language. A spec written in
+# Korean declared its new files just as clearly, matched nothing, and every
+# creating round opened with the guaranteed findings this exemption exists to
+# prevent — so the feature had never once fired for those specs (measured
+# 2026-08-18: four specs, six findings, all of them files the round was being
+# sent to create).
+CREATE_WORDS = (
+    r"create|creates?d?|new files?|files? to create|to create|add files?"
+    r"|신규(?:\s*파일)?|새\s*파일|생성할?\s*파일|만들\s*파일|추가할?\s*파일"
+)
 CREATE_OPEN = re.compile(
     r"^\s*(?:[-*+]\s+)?(?:#+\s*)?(?:\*\*)?"
-    r"(?:create|creates?d?|new files?|files? to create|to create|add files?)"
+    r"(?:" + CREATE_WORDS + r")"
     r"(?:\*\*)?\s*(?:\([^)]*\))?\s*:\s*$", re.I)
 CREATE_INLINE = re.compile(
     r"^\s*(?:[-*+]\s+)?(?:#+\s*)?(?:\*\*)?"
-    r"(?:create|new files?|files? to create|to create|add files?)"
+    r"(?:" + CREATE_WORDS + r")"
     r"(?:\*\*)?\s*:\s+\S", re.I)
 # Inside a creation block: a list item, or a wrapped continuation of one.
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
