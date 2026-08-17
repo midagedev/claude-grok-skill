@@ -489,16 +489,29 @@ EOF
   printf ']\n'
 }
 
-case "${1:-list}" in
-  start)  shift; cmd_start "$@" ;;
-  finish) shift; cmd_finish "$@" ;;
-  prune)  shift; cmd_prune "$@" ;;
-  line)   shift; parse_filter_flags "$@"; cmd_line "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
-  json)   shift; parse_filter_flags "$@"; cmd_json "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
-  list)   shift; parse_filter_flags "$@"; cmd_list "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
-  dismiss) shift; cmd_dismiss "$@" ;;
+# The subcommand is consumed here rather than inside each branch: `shift` with
+# no positional args fails, and under `set -e` that killed the documented
+# no-argument form (`runs.sh` = `runs.sh list`) with no output and rc=1 — the
+# one invocation the README leads with (measured 2026-08-18).
+SUB="${1:-list}"
+case "$SUB" in
+  -h|--help) ;;            # the main case renders it; nothing to consume
+  -*) SUB=list ;;          # `runs.sh --label x` is the default verb, filtered
+  *) if [ "$#" -gt 0 ]; then shift; fi ;;
+esac
+
+case "$SUB" in
+  start)  cmd_start "$@" ;;
+  finish) cmd_finish "$@" ;;
+  prune)  cmd_prune "$@" ;;
+  line)   parse_filter_flags "$@"; cmd_line "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
+  json)   parse_filter_flags "$@"; cmd_json "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
+  list)   parse_filter_flags "$@"; cmd_list "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}" ;;
+  dismiss) cmd_dismiss "$@" ;;
   # The whole header comment, however long it grows — a fixed line range
   # here was measured to truncate the help mid-sentence after two edits.
   -h|--help) awk 'NR == 1 { next } /^#/ { print; next } { exit }' "$0"; exit 0 ;;
-  *) echo "runs.sh: unknown subcommand: $1 (list|line|json|start|finish|prune|dismiss)" >&2; exit 64 ;;
+  # $SUB, not $1: the subcommand was already shifted off above, and under
+  # `set -u` a lone bad argument would abort before naming itself.
+  *) echo "runs.sh: unknown subcommand: $SUB (list|line|json|start|finish|prune|dismiss)" >&2; exit 64 ;;
 esac
