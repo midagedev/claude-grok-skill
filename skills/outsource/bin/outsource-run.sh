@@ -80,6 +80,7 @@
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$SKILL_DIR/bin/signal-hold.sh"
 CWD=""; SPEC=""; LOG=""; SESSION=""; CONFIG_DIR=""; ALLOW_AGENT=0; NO_VISION_CHECK=0
 REQUIRE_QUOTA=""; LABEL=""; MAX_SECONDS=""; DONE_MARKER=""
 HARNESS="${OUTSOURCE_HARNESS:-claude-code}"
@@ -338,6 +339,11 @@ case "$HARNESS" in
 esac
 
 trap 'runs_note_finish "$?"' EXIT
+# TERM/INT/HUP to this wrapper are held (signal-hold.sh): the harness child
+# keeps running, the wait sites below ride out the interrupt via await_child,
+# and the registry entry still gets its finish. An untrapped TERM would skip
+# the EXIT trap entirely — the same lost-sentinel class grok-run.sh had.
+hold_signals
 RUN_ID="$("$RUNS_SH" start \
   --pid "$$" \
   --label "${LABEL:-$(default_label)}" \
@@ -408,8 +414,8 @@ PY
   HARNESS_PID=$!
   set +m
   watchdog_start "$HARNESS_PID"
-  wait "$HARNESS_PID"
-  RC_EXIT=$?
+  await_child "$HARNESS_PID"
+  RC_EXIT=$AWAIT_RC
   if watchdog_stop; then
     # A killed round has a truncated log, so the model-identity assertion
     # would fail on it and report a mismatch that never happened. The
@@ -617,8 +623,8 @@ RC
   HARNESS_PID=$!
   set +m
   watchdog_start "$HARNESS_PID"
-  wait "$HARNESS_PID"
-  RC_EXIT=$?
+  await_child "$HARNESS_PID"
+  RC_EXIT=$AWAIT_RC
   if watchdog_stop; then
     timed_out_note
     # The session id is still worth recovering: crush wrote it, and it is

@@ -40,12 +40,16 @@
 #     planning must not count as completion.
 #
 # Foreground by design: run the whole invocation under nohup/& yourself,
-# exactly one background layer, same as outsource-run.sh.
+# exactly one background layer, same as outsource-run.sh. Foreground makes
+# the wrapper the caller's to kill, so TERM/INT/HUP are held (signal-hold.sh):
+# the child keeps running, the wrapper waits it out and still writes the
+# sentinel, with a wrapper_signal= breadcrumb naming what it survived.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNS="$HERE/runs.sh"
 LAST_REPORT="$HERE/last-report.sh"
+. "$HERE/signal-hold.sh"
 STARTUP_GRACE="${GROK_RUN_STARTUP_GRACE:-30}"
 
 CWD="" SPEC="" LOG="" LABEL="" MARKER="" PROFILE="strict" RESEARCH=0 RESUME=""
@@ -118,8 +122,15 @@ write_sentinel() {  # <rc> <marker-verdict>
     echo "model_requested=$MODEL"
     echo "session=$SID"
     [ -n "$MARKER" ] && echo "done_marker=$2"
+    [ -n "$WRAPPER_SIGNAL" ] && echo "wrapper_signal=$WRAPPER_SIGNAL"
   } > "$RC_FILE"
 }
+
+# Last resort for exits that never reach a write_sentinel call (a script bug,
+# a set -u trip): an exit without a sentinel is the one outcome watchers
+# cannot classify, so rc=71 names it. Does not run on SIGKILL.
+trap '[ -f "$RC_FILE" ] || write_sentinel 71 absent' EXIT
+hold_signals
 
 RUN_ID="$("$RUNS" start --pid $$ --label "$LABEL" --provider xai --harness grok-cli \
           --model "$MODEL" --cwd "$CWD" --spec "$SPEC" --log "$LOG" 2>/dev/null)" || RUN_ID=""
@@ -146,7 +157,7 @@ for _ in $(seq 1 "$STARTUP_GRACE"); do
   sleep 1
 done
 if [ "$started" -ne 1 ] && ! kill -0 "$GROK_PID" 2>/dev/null; then
-  wait "$GROK_PID"; rc=$?
+  await_child "$GROK_PID"; rc=$AWAIT_RC
   [ "$rc" -eq 0 ] && rc=69   # exited clean but wrote nothing: still not a round
   echo "grok-run.sh: grok never produced output (rc=$rc) — stderr follows:" >&2
   tail -5 "${LOG%.ndjson}.err" >&2 || true
@@ -155,7 +166,7 @@ if [ "$started" -ne 1 ] && ! kill -0 "$GROK_PID" 2>/dev/null; then
   exit "$rc"
 fi
 
-wait "$GROK_PID"; rc=$?
+await_child "$GROK_PID"; rc=$AWAIT_RC
 
 verdict="absent"
 if [ -n "$MARKER" ] && [ -x "$LAST_REPORT" ]; then

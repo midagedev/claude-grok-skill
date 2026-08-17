@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.1 — 2026-08-17 — a signal to the wrapper is not a verdict on the round
+
+- **`bin/signal-hold.sh`** (new, sourced by both launchers) — TERM/INT/HUP to
+  a launcher now mean "hold and finish the paperwork", never "abandon the
+  evidence". Twice in one week a caller's timeout SIGTERMed the foreground
+  wrapper while the child round was healthy: the round delivered, but the
+  sentinel writer died with the wrapper and every watcher keyed on `.rc`
+  waited forever. The child is deliberately not forwarded the signal — the
+  incident is a disposable wrapper outliving its usefulness, and forwarding
+  would turn a bookkeeping timeout into a round kill. `await_child` rides out
+  trapped-signal interrupts to the child's real exit; the sentinel gains a
+  `wrapper_signal=` breadcrumb naming what it survived.
+- **`bin/grok-run.sh`** — last-resort EXIT trap: an exit that never reached a
+  `write_sentinel` call (script bug, `set -u` trip) writes rc=71 instead of
+  leaving the one outcome watchers cannot classify. Does not run on SIGKILL;
+  that residue is accepted and documented in signal-hold.sh.
+- **`tests/grok-run-signal.test.sh`** (new) — reproduces the incident against
+  a fake grok (FAIL-first verified: pre-fix source loses the sentinel), and
+  pins the normal path unregressed.
+
 ## 0.10.0 — 2026-08-17 — one owner per fact, and docs that cannot dangle
 
 - **`bin/grok-run.sh`** — raw grok rounds join the registry. A hand-assembled
