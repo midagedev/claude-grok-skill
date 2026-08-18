@@ -162,6 +162,27 @@ LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
 CONTINUATION = re.compile(r"^\s{2,}\S")
 
 
+def strip_edges(raw):
+    """Trim prose punctuation, but keep a path's leading dot.
+
+    `.github/workflows/ci.yml` loses its meaning to a plain strip: the token
+    becomes `github/workflows/ci.yml`, which does not exist, so a file that is
+    right there is reported missing — and every spec that cites a CI workflow
+    (most of them) opens with a guaranteed false finding. Same failure mode as
+    the HTML-comment and to-be-created exemptions above, arriving from a third
+    direction: a linter that invents findings is one people stop reading.
+
+    Restricted to tokens containing `/`, so prose keeps losing its dots
+    ("e.g.", "v0.14.1.") exactly as before.
+    """
+    tok = raw.strip(EDGE)
+    if not tok or "/" not in tok:
+        return tok
+    head = raw[: len(raw) - len(raw.lstrip(EDGE))]
+    dots = len(head) - len(head.rstrip("."))
+    return "." * dots + tok if dots else tok
+
+
 def creation_lines(lines):
     """Line numbers (1-based) whose path references are to-be-created."""
     marked, in_block = set(), False
@@ -301,7 +322,7 @@ for spec in specs:
             for pos, raw in tokens(line):
                 if is_template(raw):
                     continue
-                tok = raw.strip(EDGE)
+                tok = strip_edges(raw)
                 if not tok or is_template(tok):
                     continue
                 if any(a <= base + pos < b for a, b in sp):

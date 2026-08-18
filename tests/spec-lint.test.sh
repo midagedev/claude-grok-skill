@@ -210,5 +210,29 @@ run <<'EOF'
 EOF
 ok "Korean prose beginning with the word is not an opener" 1 "missing: pkg/absent.go" "-"
 
+# ---- a dotfile path keeps its dot -------------------------------------------
+# The edge-punctuation strip took the leading `.` with it, so every spec citing
+# a CI workflow reported `.github/workflows/ci.yml` as missing while the file
+# sat right there (measured 2026-08-19: two of six audit specs, one finding
+# each, both false). Restricted to `/`-bearing tokens, so prose keeps losing
+# its dots — the two cases below pin both directions.
+mkdir -p "$TMP/root/.github/workflows"
+printf 'name: CI\n' > "$TMP/root/.github/workflows/ci.yml"
+
+run <<'EOF'
+Read `.github/workflows/ci.yml` for the job list.
+EOF
+ok "a dotfile directory keeps its leading dot" 0 "ok" "missing"
+
+run <<'EOF'
+Read `./pkg/exists.go` and `../outside/absent.go`.
+EOF
+ok "a relative prefix survives, and still resolves" 1 "missing: ../outside/absent.go" "missing: ./pkg/exists.go"
+
+run <<'EOF'
+Prose with an abbreviation, e.g. a note about `pkg/exists.go` behaviour.
+EOF
+ok "prose dots are still stripped" 0 "ok" "missing"
+
 printf '\nspec-lint: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
