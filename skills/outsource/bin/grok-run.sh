@@ -107,6 +107,25 @@ if [ -n "$MARKER" ] && ! grep -qF -- "$MARKER" "$SPEC"; then
   echo "grok-run.sh: --done-marker '$MARKER' does not appear in the spec ($SPEC). Add that exact string as the spec's last line (the completion marker), then relaunch." >&2
   exit 64
 fi
+
+# --json-schema and --done-marker cannot both be satisfied. The marker is
+# looked for in the final report, and under a schema the final report *is*
+# the JSON object: a sentinel line beside it would violate the very schema
+# the flag imposes. Measured 2026-08-18: a vision round returned a complete,
+# schema-valid verdict and still exited 72 done_marker=absent — the round was
+# fine, the launch was contradictory. Refuse the contradiction here rather
+# than let it come back as a false failure. For schema rounds the completion
+# proof is rc=0 plus stdout parsing against the schema, which a truncated
+# round cannot fake; put a marker field *inside* the schema if you want one.
+if [ -n "$MARKER" ]; then
+  for _a in ${EXTRA[@]+"${EXTRA[@]}"}; do
+    case "$_a" in
+      --json-schema|--json-schema=*)
+        echo "grok-run.sh: --done-marker and --json-schema are mutually exclusive — under a schema the final report IS the JSON object, so the marker can never appear in it. Drop --done-marker (completion = rc 0 + schema-valid stdout), or add a marker field inside the schema." >&2
+        exit 64 ;;
+    esac
+  done
+fi
 command -v grok >/dev/null || { echo "grok-run.sh: grok CLI not on PATH" >&2; exit 69; }
 [ -n "$LABEL" ] || LABEL="$(basename "${SPEC%.md}")"
 

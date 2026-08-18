@@ -15,7 +15,7 @@ references/spec-authoring.md.
 | Implementation, parallel / risky / registers gates | strict (or trusted for WIP commits) | lead-created worktree `--cwd` | + track boundary, per-package gates, copy-artifacts-out rule |
 | Investigation / census (answer in the final message) | strict (git reads help) | `--research` belt; subagents stay off | narrow questions · premise-check invitation · **deliverable = final message, never a file** (the belt denies Write; the runner injects a notice, but do not spec a report file) |
 | Report whose deliverable IS a file | strict, **no `--research`** | whitelist the one report path in the spec | measured 2026-08-17: a research-belt round specced to write a report looped "writing it" for 301 turns — the belt and the deliverable contradicted |
-| Vision verdict | readonly-plus | `--research`; `-- --json-schema '<schema>'` for the verdict | 3-element briefing (numeric context first · narrowed question · "do not judge" list); fresh SID, retire after one verdict |
+| Vision verdict | readonly-plus | `--research`; `-- --json-schema '<schema>'` for the verdict; **no `--done-marker`** | 3-element briefing (numeric context first · narrowed question · "do not judge" list); fresh SID, retire after one verdict |
 | Image/asset generation | strict | worktree `--cwd` | copy-out path for `~/.grok/sessions/...` outputs · JPEG/matting plan |
 
 Everything below details the rows of this table.
@@ -242,6 +242,20 @@ breakage is report-only. The lead applies diffs one track at a time.
 When you need to parse a verdict, add `--json-schema '<JSON Schema>'` —
 stdout becomes schema-constrained JSON.
 
+**`--json-schema` and `--done-marker` are mutually exclusive.** The marker is
+looked for in the round's final report, and under a schema the final report
+*is* the JSON object — a sentinel line cannot appear beside it without
+violating the schema the same flag imposes. Passing both is a contradiction
+the lead writes into the spec and then reads back as a failure: measured
+2026-08-18, a vision round produced a complete, correct verdict and still
+exited 72 `done_marker=absent`. Nothing was wrong with the round.
+
+For a schema round, completion evidence is the sentinel's `rc=0` plus
+**stdout parsing as valid JSON against the schema** — that is a stronger
+proof than a marker string, because a truncated or abandoned round cannot
+produce a schema-valid object. Only add a marker field *inside* the schema if
+you want one, and never as the launcher's `--done-marker`.
+
 ### Vision verdict (one-shot judge)
 
 The lead never reads screenshots itself — image Reads bloat the lead
@@ -251,6 +265,8 @@ transcript; only the judge's **text verdict** comes back. Recipe:
   turns make these the heaviest sessions). A FIX round gets a *new* judge.
 - Flags: `--git-profile readonly-plus --research`, plus `-- --json-schema
   '<schema>'` for a parseable SHIP/FIX verdict with per-axis fields.
+  **Do not pass `--done-marker` on a schema round** — see "Structured
+  results" above; the two flags cannot both be satisfied.
 - The briefing has three mandatory elements (each earned by a round of
   decisive verdicts): ① **numeric context first** — the measured table, so
   the judge spends itself on perception, not re-measurement; ② a **narrowed

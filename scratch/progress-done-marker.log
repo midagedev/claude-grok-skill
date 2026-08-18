@@ -1,0 +1,4 @@
+PROGRESS 2026-08-18T11:08:55Z investigate read launchers, docs, tests; 72 unused; 70 is model-identity only in outsource-run; runs.sh treats any rc!=0 as failed
+PROGRESS 2026-08-18T11:10:37Z fail-first grok absent rc=70 empty stderr; glm absent rc=0; parity red; identity 70 still green
+PROGRESS 2026-08-18T11:11:25Z implement 72+stderr on both launchers; vision copy; docs+changelog; tests written
+PROGRESS 2026-08-18T11:15:24Z verify run-all all green; bash -n 0; 72 no collision; 70 still identity-only

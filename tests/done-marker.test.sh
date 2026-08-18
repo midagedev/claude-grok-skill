@@ -30,6 +30,9 @@
 #     provider, never register a round
 #   - a log whose plan quotes the marker but whose final report does not
 #     → done_marker=absent, done_marker_scope=report, on both launchers
+#   - --done-marker together with --json-schema → refused at 64 before the
+#     provider is contacted (a schema round's report IS the JSON object, so
+#     the marker can never appear); --json-schema alone still launches
 #
 # Usage: tests/done-marker.test.sh   (exit 0 = all pass)
 set -uo pipefail
@@ -385,6 +388,60 @@ else
   note "plan-quote parity: grok rc=$GROK_PLAN_RC glm rc=$GLM_PLAN_RC (want both 72, both scope=report)"
   echo "      grok sentinel: $GROK_PLAN_SENTINEL" >&2
   echo "      glm  sentinel: $GLM_PLAN_SENTINEL" >&2
+fi
+
+# ── Part 3: --done-marker + --json-schema is a contradiction, not a round ─
+# Field incident (2026-08-18): a vision round launched with both flags
+# returned a complete, schema-valid verdict and still exited 72
+# done_marker=absent. Under a schema the final report *is* the JSON object,
+# so a sentinel line beside it would violate the schema the same flag
+# imposes — the marker can never be found. The lead read a false failure.
+# Refused at 64 before the provider is contacted (canary proves it), even
+# though the spec here *does* contain the marker: the spec-contains check
+# cannot see this contradiction, so it needs its own guard.
+export FAKE_PROVIDER_CANARY="$TMP/schema-marker.canary"
+rm -f "$FAKE_PROVIDER_CANARY"
+SCHEMA_LOG="$TMP/schema-marker.ndjson"
+rm -f "$SCHEMA_LOG" "$SCHEMA_LOG.rc"
+set +e
+bash "$GROK_RUN" --cwd "$TMP/cwd" --spec "$TMP/spec.md" --log "$SCHEMA_LOG" \
+  --label schema-marker --done-marker "$MARKER" \
+  -- --json-schema '{"type":"object"}' \
+  >"$TMP/schema-marker.out" 2>"$TMP/schema-marker.err"
+SCHEMA_RC=$?
+set -e
+if [ "$SCHEMA_RC" -eq 64 ] \
+   && grep -qF -- '--json-schema' "$TMP/schema-marker.err" \
+   && grep -qF -- '--done-marker' "$TMP/schema-marker.err" \
+   && grep -qi 'mutually exclusive' "$TMP/schema-marker.err" \
+   && [ ! -e "$TMP/schema-marker.canary" ] \
+   && [ ! -e "$SCHEMA_LOG" ] \
+   && [ ! -e "$SCHEMA_LOG.rc" ] \
+   && ! run_registered schema-marker; then
+  pass=$((pass + 1))
+else
+  note "schema+marker: rc=$SCHEMA_RC want=64; canary=$([ -e "$TMP/schema-marker.canary" ] && echo yes || echo no); log=$([ -e "$SCHEMA_LOG" ] && echo yes || echo no); err=$(cat "$TMP/schema-marker.err" 2>/dev/null)"
+fi
+
+# A schema round WITHOUT --done-marker must still launch normally — the
+# guard must key on the pair, not on --json-schema alone.
+unset FAKE_PROVIDER_CANARY FAKE_GROK_NDJSON
+FAKE_GROK_TEXT='{"verdict":"SHIP"}'
+export FAKE_GROK_TEXT
+SCHEMA_OK_LOG="$TMP/schema-nomarker.ndjson"
+rm -f "$SCHEMA_OK_LOG" "$SCHEMA_OK_LOG.rc"
+set +e
+bash "$GROK_RUN" --cwd "$TMP/cwd" --spec "$TMP/spec.md" --log "$SCHEMA_OK_LOG" \
+  --label schema-nomarker \
+  -- --json-schema '{"type":"object"}' \
+  >"$TMP/schema-nomarker.out" 2>"$TMP/schema-nomarker.err"
+SCHEMA_OK_RC=$?
+set -e
+if [ "$SCHEMA_OK_RC" -eq 0 ] && [ -e "$SCHEMA_OK_LOG.rc" ] \
+   && ! grep -q '^done_marker=' "$SCHEMA_OK_LOG.rc"; then
+  pass=$((pass + 1))
+else
+  note "schema without marker: rc=$SCHEMA_OK_RC want=0 and no done_marker key; sentinel=$(cat "$SCHEMA_OK_LOG.rc" 2>/dev/null); err=$(cat "$TMP/schema-nomarker.err" 2>/dev/null)"
 fi
 
 echo "done-marker: $pass passed, $fail failed"

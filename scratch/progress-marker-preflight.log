@@ -1,0 +1,4 @@
+PROGRESS 2026-08-18T11:26:15Z investigate trap docs none; launchers grep whole-log vs last-report; codes 1,2,3,64,65,66,69,70,71,72,124; reuse 64 for unsatisfiable marker
+PROGRESS 2026-08-18T11:28:10Z fail-first HEAD worktree 7 passed 6 failed; preflight both 72+canary; glm plan-quote found rc=0; grok plan-quote absent but no scope line
+PROGRESS 2026-08-18T11:32:00Z implement preflight 64 both launchers; finish() last-report then crush log fallback; docs+changelog; tests 13/13
+PROGRESS 2026-08-18T11:33:00Z verify bash -n 0; done-marker 13/13; all 10 suites green; 67/68/73 unused; install copy not edited

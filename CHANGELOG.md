@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.4 — 2026-08-18 — `--done-marker` and `--json-schema` cannot both be satisfied
+
+- **`grok-run.sh` refuses `--done-marker` together with `--json-schema`
+  (exit 64), before the provider is contacted.** Under a schema the final
+  report *is* the JSON object, so a sentinel line beside it would violate
+  the very schema the flag imposes — the marker can never be found.
+  Measured: a vision round launched with both flags returned a complete,
+  schema-valid verdict and still exited 72 `done_marker=absent`. Nothing was
+  wrong with the round; the launch was contradictory, and the lead read it
+  back as a failure. The existing spec-contains preflight cannot see this
+  case (the spec *did* contain the marker), so it needed its own guard.
+- Completion evidence for a schema round is `rc=0` plus stdout parsing as
+  schema-valid JSON — stronger than a marker string, since a truncated or
+  abandoned round cannot produce a schema-valid object. Put a marker field
+  *inside* the schema if you want one.
+- `references/grok.md`: the vision-verdict row and the "Structured results"
+  section now say this outright, so the recipe stops prescribing a pair it
+  cannot honour.
+- `tests/done-marker.test.sh`: the pair is refused at 64 with no provider
+  contact, no log, no registry entry; `--json-schema` **alone** still
+  launches normally (the guard keys on the pair, not the schema flag).
+
 ## 0.10.3 — 2026-08-18 — refuse a done-marker the spec never asked for
 
 - **`--done-marker X` is refused (exit 64) when the spec does not contain
