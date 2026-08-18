@@ -66,6 +66,8 @@ contains only what is unique to this task:
 DONE-<track>
 ```
 
+`--done-marker` at launch requires that exact string in the spec; the launcher refuses if it is missing.
+
 ### What the lead checks while writing the spec
 
 - **Quote the applicable pitfalls yourself.** The preamble tells grok to go

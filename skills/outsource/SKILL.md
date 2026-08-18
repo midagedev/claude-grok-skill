@@ -166,13 +166,16 @@ the `.rc` sentinel**, never the report's existence.
 1. **Delegate "done" ≠ done.** Read `git diff` yourself and re-run the
    affected gates under your own ownership. Verify by the tree and the
    spec's completion marker (`DONE-<track>`), never by harness lifecycle
-   notifications. Pass `--done-marker <string>` at launch and the sentinel
-   records `done_marker=found|absent`. A clean harness exit without the
-   marker is exit 72 on both launchers — 70 stays the model-identity
-   assertion. Two rounds on one day both exited clean: one had written
-   nothing at all, the other had correctly stopped because the spec's own
-   precondition check said to. 72 names the missing marker; the tree
-   still tells those two apart.
+   notifications. Pass `--done-marker <string>` at launch only when the
+   spec contains that exact string as its last line — the launcher refuses
+   with exit 64 before starting the round if it does not, because the
+   delegate is never told to print a marker the spec does not ask for.
+   The sentinel records `done_marker=found|absent`. A clean harness exit
+   without the marker is exit 72 on both launchers — 70 stays the
+   model-identity assertion. Two rounds on one day both exited clean: one
+   had written nothing at all, the other had correctly stopped because the
+   spec's own precondition check said to. 72 names the missing marker; the
+   tree still tells those two apart.
 2. **Re-run the suite it called green from cold** and compare the test
    count with CI's — a differing count is a failed verification. **Never
    pipe a gate through `tail`/`head`**: the pipeline's exit status becomes

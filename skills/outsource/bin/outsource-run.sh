@@ -70,7 +70,8 @@
 # registry. It has no default and should not be given one — the kill lands
 # mid-edit and the partial tree is the lead's to review.
 #
-# Exit codes: 64 usage (unknown flag/provider/harness, bare --model on crush)
+# Exit codes: 64 usage (unknown flag/provider/harness, bare --model on crush,
+#             or --done-marker whose string is not in the spec)
 #             65 vision-spec refusal (provider cannot see images)
 #             66 --require-quota floor missed, or not evaluable
 #             69 harness CLI missing
@@ -114,6 +115,22 @@ done
 [ -d "$CWD" ]  || { echo "--cwd does not exist: $CWD" >&2; exit 64; }
 [ -n "$SPEC" ] || { echo "--spec is required" >&2; exit 64; }
 [ -f "$SPEC" ] || { echo "--spec does not exist: $SPEC" >&2; exit 64; }
+# --done-marker is a contract the spec must be able to satisfy. Nothing
+# injects the string into the prompt (the spec is the whole truth the
+# delegate reads, and spec-lint would not see a hidden append). A lead
+# who passes --done-marker X while the spec never contains X has stated
+# something the delegate cannot know about — measured 2026-08-18: three
+# delivered rounds, all reported absent. Refuse here, before contacting
+# the provider and before registering a round — same point in the
+# sequence as grok-run.sh (right after the spec is known to exist).
+# 64 is already usage on this launcher (unknown flag/provider/harness,
+# missing required flags). 72 is a different fact: the round ran and the
+# report lacks the marker. grep -qF matches the post-round check, so the
+# two cannot disagree about "contains".
+if [ -n "$DONE_MARKER" ] && ! grep -qF -- "$DONE_MARKER" "$SPEC"; then
+  echo "outsource: --done-marker '$DONE_MARKER' does not appear in the spec ($SPEC). Add that exact string as the spec's last line (the completion marker), then relaunch." >&2
+  exit 64
+fi
 
 # ---- provider table (the one place a provider is defined; both harnesses
 # read it). One line per provider:
@@ -249,6 +266,7 @@ timed_out_note() {  # one message, both harnesses
 # and "it ended with rc". Bookkeeping must never be able to fail a round, so
 # every call here is best-effort.
 RUNS_SH="$SKILL_DIR/bin/runs.sh"
+LAST_REPORT="$SKILL_DIR/bin/last-report.sh"
 RUN_ID=""
 
 runs_note_finish() {  # <rc> — idempotent; the EXIT trap and finish() both call it
@@ -274,16 +292,43 @@ finish() {  # <exit-code> — sentinel + SESSION line + exit, both harnesses
   # cannot read rc=0 as delivered. 70 stays model-identity.
   local marker_line=""
   if [ -n "$LOG" ] && [ -n "$DONE_MARKER" ]; then
-    if [ -s "$LOG" ] && grep -qF -- "$DONE_MARKER" "$LOG" 2>/dev/null; then
-      marker_line="done_marker=found"
-    else
-      marker_line="done_marker=absent"
-      if [ "$rc" -eq 0 ]; then
-        echo "outsource: the round finished but --done-marker '$DONE_MARKER' is absent; not claiming a pass (exit 72). Judge by the tree, not this exit code." >&2
-        rc=72
+    # Prefer the final report (last-report.sh), same scope as grok-run.sh:
+    # a marker quoted in a plan, a tool result, or an echoed spec must not
+    # count as completion. last-report.sh already understands claude-code
+    # JSONL (last result event) and grok ndjson (text after the last tool).
+    local marker_scope="" verdict="" report=""
+    if [ -s "$LOG" ] && [ -x "$LAST_REPORT" ] \
+       && report="$("$LAST_REPORT" "$LOG" 2>/dev/null)"; then
+      marker_scope="report"
+      if printf '%s' "$report" | grep -qF -- "$DONE_MARKER"; then
+        verdict="found"
+      else
+        verdict="absent"
       fi
+    elif [ "$HARNESS" = crush ]; then
+      # crush run -q writes the model's stdout (this launcher merges
+      # stderr) as plain text — not JSONL with a result event and not grok
+      # text-deltas. last-report.sh skips non-JSON lines and exits 65, so
+      # there is no extractable final report and no plan-vs-report
+      # boundary to honour. Grep the whole log for this harness only,
+      # and record the scope so a found here is not silently the same
+      # verdict as a found in the final report on grok-run.sh.
+      marker_scope="log"
+      if [ -s "$LOG" ] && grep -qF -- "$DONE_MARKER" "$LOG" 2>/dev/null; then
+        verdict="found"
+      else
+        verdict="absent"
+      fi
+    else
+      marker_scope="report"
+      verdict="absent"
     fi
-    marker_line="$marker_line ($DONE_MARKER)"$'\n'
+    marker_line="done_marker=$verdict"
+    if [ "$verdict" = "absent" ] && [ "$rc" -eq 0 ]; then
+      echo "outsource: the round finished but --done-marker '$DONE_MARKER' is absent; not claiming a pass (exit 72). Judge by the tree, not this exit code." >&2
+      rc=72
+    fi
+    marker_line="$marker_line ($DONE_MARKER)"$'\n'"done_marker_scope=$marker_scope"$'\n'
   fi
   runs_note_finish "$rc"
   if [ -n "$LOG" ]; then

@@ -38,9 +38,15 @@
 #     is exit 72 (not 70 — that is model-identity on the zai launcher).
 #   - The done marker is looked for in the round's final report (via
 #     last-report.sh), not anywhere in the stream — a marker quoted early in
-#     planning must not count as completion.
+#     planning must not count as completion. The sentinel records
+#     done_marker_scope=report so that verdict is not silently the same
+#     word as a whole-log grep on another launcher.
+#   - --done-marker X is refused before grok is started when the spec does
+#     not contain X (exit 64). The launcher never injects the string into
+#     the prompt; the spec is the whole contract the delegate reads.
 #
-# Exit codes: 64 usage (unknown flag / git profile, missing required flags)
+# Exit codes: 64 usage (unknown flag / git profile, missing required flags,
+#             or --done-marker whose string is not in the spec)
 #             66 no such cwd, or unreadable spec
 #             69 grok CLI missing, or the process exited without writing
 #             71 EXIT trap: no sentinel was written (script bug / set -u)
@@ -84,6 +90,23 @@ done
   echo "usage: grok-run.sh --cwd <dir> --spec <file> --log <file.ndjson> [...]" >&2; exit 64; }
 [ -d "$CWD" ]  || { echo "grok-run.sh: no such cwd: $CWD" >&2; exit 66; }
 [ -r "$SPEC" ] || { echo "grok-run.sh: unreadable spec: $SPEC" >&2; exit 66; }
+# --done-marker is a contract the spec must be able to satisfy. Nothing
+# injects the string into the prompt (the spec is the whole truth the
+# delegate reads, and spec-lint would not see a hidden append). A lead
+# who passes --done-marker X while the spec never contains X has stated
+# something the delegate cannot know about — measured 2026-08-18: three
+# delivered rounds, all reported absent. Refuse here, before contacting
+# the provider and before registering a round.
+# 64 is already usage on this launcher (unknown flag, missing required
+# flags, bad git profile). 72 is a different fact: the round ran and the
+# report lacks the marker. 73 would distinguish this from other usage
+# errors, but watchers only split rc=0 / rc!=0, and a new code would
+# collide with nothing we need to reserve. grep -qF matches the
+# post-round check, so the two cannot disagree about "contains".
+if [ -n "$MARKER" ] && ! grep -qF -- "$MARKER" "$SPEC"; then
+  echo "grok-run.sh: --done-marker '$MARKER' does not appear in the spec ($SPEC). Add that exact string as the spec's last line (the completion marker), then relaunch." >&2
+  exit 64
+fi
 command -v grok >/dev/null || { echo "grok-run.sh: grok CLI not on PATH" >&2; exit 69; }
 [ -n "$LABEL" ] || LABEL="$(basename "${SPEC%.md}")"
 
@@ -146,6 +169,7 @@ write_sentinel() {  # <rc> <marker-verdict>
     echo "model_requested=$MODEL"
     echo "session=$SID"
     [ -n "$MARKER" ] && echo "done_marker=$2"
+    [ -n "$MARKER" ] && echo "done_marker_scope=report"
     [ -n "$WRAPPER_SIGNAL" ] && echo "wrapper_signal=$WRAPPER_SIGNAL"
   } > "$RC_FILE"
 }

@@ -9,12 +9,27 @@
 # depending on which sister they launched. 70 was already the documented
 # model-identity failure, so the grok path also collided with that meaning.
 #
+# A second incident, same session, sits upstream of that: three rounds
+# launched with --done-marker whose specs never contained the string. The
+# delegate cannot print a token it was never told to print, so every one
+# of those delivered rounds reported absent. That is a usage error by the
+# caller, refused at 64 before the provider is contacted.
+#
+# A third: grok-run.sh greps the final report (via last-report.sh);
+# outsource-run.sh grepped the whole log, so a plan that quoted the marker
+# counted as found. done_marker=found then meant two different things.
+#
 # Asserted here:
-#   - marker present  → rc stays 0, sentinel done_marker=found
-#   - marker absent   → dedicated code 72, sentinel absent, stderr names
-#                       the missing string and leaves the verdict on the tree
+#   - marker present in spec + report  → rc stays 0, sentinel found
+#   - marker present in spec, absent from report → dedicated code 72,
+#     sentinel absent, stderr names the missing string
 #   - both launchers emit that same code and the same-intent line
 #   - 70 is still only the model-identity assertion (regression)
+#   - --done-marker X with a spec that does not contain X → both launchers
+#     refuse at 64, name the string and the spec path, never invoke the
+#     provider, never register a round
+#   - a log whose plan quotes the marker but whose final report does not
+#     → done_marker=absent, done_marker_scope=report, on both launchers
 #
 # Usage: tests/done-marker.test.sh   (exit 0 = all pass)
 set -uo pipefail
@@ -35,27 +50,46 @@ MARKER="DONE-MARKER-CONTRACT"
 # Shared payload both launchers must print on a missing marker (prefix may
 # differ: grok-run.sh: vs outsource:). The test greps this, not a tone.
 INTENT="the round finished but --done-marker '$MARKER' is absent; not claiming a pass (exit 72). Judge by the tree, not this exit code."
+# Shared payload for the preflight refuse (prefix may differ).
+PREFLIGHT_INTENT="--done-marker '$MARKER' does not appear in the spec"
+PREFLIGHT_FIX="Add that exact string as the spec's last line (the completion marker), then relaunch."
 
 mkdir -p "$TMP/bin" "$TMP/cwd"
-printf 'do the thing\n' > "$TMP/spec.md"
+# Spec carries the marker so a --done-marker launch is satisfiable. The
+# preflight cases below use a separate file that does not.
+printf 'do the thing\n%s\n' "$MARKER" > "$TMP/spec.md"
+printf 'do the thing\n' > "$TMP/spec-no-marker.md"
 
 # Fake grok: writes one text event (what last-report.sh extracts) then exits 0.
+# FAKE_GROK_NDJSON, when set, is the whole stream (plan-vs-report fixtures).
+# FAKE_PROVIDER_CANARY is touched only if the binary actually runs.
 cat > "$TMP/bin/grok" <<'FAKE'
 #!/usr/bin/env bash
-printf '{"type":"text","data":%s}\n' "$(python3 -c 'import json,os; print(json.dumps(os.environ.get("FAKE_GROK_TEXT","working, no marker")))')"
+if [ -n "${FAKE_PROVIDER_CANARY:-}" ]; then
+  : > "$FAKE_PROVIDER_CANARY"
+fi
+if [ -n "${FAKE_GROK_NDJSON:-}" ]; then
+  printf '%s\n' "$FAKE_GROK_NDJSON"
+else
+  printf '{"type":"text","data":%s}\n' "$(python3 -c 'import json,os; print(json.dumps(os.environ.get("FAKE_GROK_TEXT","working, no marker")))')"
+fi
 printf '{"type":"end","stopReason":"end_turn"}\n'
 exit 0
 FAKE
 chmod +x "$TMP/bin/grok"
 
-# Fake crush: stdout is the launcher log (outsource-run greps the log
-# itself, not last-report.sh). `crush session last` is a post-round lookup
-# the launcher ignores on failure.
+# Fake crush: stdout is the launcher log. last-report.sh can extract a
+# report only when this output is JSONL; plain text is the real crush
+# shape and forces the log-wide fallback. `crush session last` is a
+# post-round lookup the launcher ignores on failure.
 cat > "$TMP/bin/crush" <<'FAKE'
 #!/usr/bin/env bash
 if [ "${1:-}" = "session" ]; then
   printf '%s\n' '{}'
   exit 0
+fi
+if [ -n "${FAKE_PROVIDER_CANARY:-}" ]; then
+  : > "$FAKE_PROVIDER_CANARY"
 fi
 cat >/dev/null
 printf '%s\n' "${FAKE_CRUSH_OUTPUT:-working, no marker}"
@@ -67,6 +101,9 @@ chmod +x "$TMP/bin/crush"
 # no session transcript — the unverifiable path that must stay exit 70.
 cat > "$TMP/bin/claude" <<'FAKE'
 #!/usr/bin/env bash
+if [ -n "${FAKE_PROVIDER_CANARY:-}" ]; then
+  : > "$FAKE_PROVIDER_CANARY"
+fi
 cat >/dev/null
 printf '%s\n' '{"session_id":"sess-identity","usage":{"input_tokens":1},"total_cost_usd":0,"modelUsage":{"glm-5.3":{"inputTokens":1}}}'
 exit 0
@@ -79,10 +116,19 @@ pass=0
 fail=0
 note() { fail=$((fail + 1)); echo "FAIL  $*" >&2; }
 
+# A plan that quotes the marker, then a tool event, then a final report
+# that does not. last-report.sh yields only the tail; a log-wide grep
+# matches the plan and lies "found".
+PLAN_QUOTES_MARKER="$(printf '%s\n%s\n%s' \
+  "{\"type\":\"text\",\"data\":\"planning: I will print ${MARKER} at the end\"}" \
+  '{"type":"tool_call","data":{"name":"bash"}}' \
+  '{"type":"text","data":"final report, work is done, no completion token"}')"
+
 # ── grok-run.sh ──────────────────────────────────────────────────────────
 
 run_grok() {  # <label> <text-in-report>
   local label="$1"
+  unset FAKE_GROK_NDJSON
   FAKE_GROK_TEXT="$2"
   export FAKE_GROK_TEXT
   LOG="$TMP/${label}.ndjson"
@@ -204,6 +250,141 @@ if [ "$VIS_RC" -eq 65 ] \
   pass=$((pass + 1))
 else
   note "vision copy: rc=$VIS_RC want=65 plus --no-vision-check and a verdict/artifact distinction; err=$(cat "$TMP/vision.err")"
+fi
+
+# ── Part 1: refuse an unsatisfiable marker contract before the round ─────
+# The spec does not contain MARKER. Both launchers must exit 64, name the
+# string and the spec path, tell the lead to add the last line, and never
+# invoke the provider (the canary is the proof — a log would also exist).
+
+run_preflight_grok() {
+  unset FAKE_GROK_NDJSON FAKE_GROK_TEXT
+  export FAKE_PROVIDER_CANARY="$TMP/preflight-grok.canary"
+  rm -f "$FAKE_PROVIDER_CANARY"
+  LOG="$TMP/preflight-grok.ndjson"
+  rm -f "$LOG" "$LOG.rc" "${LOG%.ndjson}.sid"
+  set +e
+  bash "$GROK_RUN" --cwd "$TMP/cwd" --spec "$TMP/spec-no-marker.md" --log "$LOG" \
+    --label preflight-grok --done-marker "$MARKER" \
+    >"$TMP/preflight-grok.out" 2>"$TMP/preflight-grok.err"
+  GROK_PRE_RC=$?
+  set -e
+}
+
+run_preflight_glm() {
+  unset FAKE_CRUSH_OUTPUT
+  export FAKE_PROVIDER_CANARY="$TMP/preflight-glm.canary"
+  rm -f "$FAKE_PROVIDER_CANARY"
+  LOG="$TMP/preflight-glm.log"
+  rm -f "$LOG" "$LOG.rc"
+  set +e
+  bash "$OUT_RUN" --cwd "$TMP/cwd" --spec "$TMP/spec-no-marker.md" --log "$LOG" \
+    --harness crush --label preflight-glm --done-marker "$MARKER" \
+    --config-dir "$TMP/cfg-preflight-glm" \
+    >"$TMP/preflight-glm.out" 2>"$TMP/preflight-glm.err"
+  GLM_PRE_RC=$?
+  set -e
+}
+
+run_registered() {  # <label> — 0 if runs.sh recorded this launch
+  [ -d "$OUTSOURCE_RUNS_DIR" ] || return 1
+  grep -l -- "label=$1" "$OUTSOURCE_RUNS_DIR"/*.run >/dev/null 2>&1
+}
+
+run_preflight_grok
+if [ "$GROK_PRE_RC" -eq 64 ] \
+   && grep -qF -- "$PREFLIGHT_INTENT" "$TMP/preflight-grok.err" \
+   && grep -qF -- "$PREFLIGHT_FIX" "$TMP/preflight-grok.err" \
+   && grep -qF -- "$TMP/spec-no-marker.md" "$TMP/preflight-grok.err" \
+   && grep -qF -- "$MARKER" "$TMP/preflight-grok.err" \
+   && [ ! -e "$TMP/preflight-grok.canary" ] \
+   && [ ! -e "$TMP/preflight-grok.ndjson" ] \
+   && [ ! -e "$TMP/preflight-grok.ndjson.rc" ] \
+   && ! run_registered preflight-grok; then
+  pass=$((pass + 1))
+else
+  note "grok preflight: rc=$GROK_PRE_RC want=64; canary=$([ -e "$TMP/preflight-grok.canary" ] && echo yes || echo no); log=$([ -e "$TMP/preflight-grok.ndjson" ] && echo yes || echo no); err=$(cat "$TMP/preflight-grok.err" 2>/dev/null)"
+fi
+
+unset FAKE_PROVIDER_CANARY
+run_preflight_glm
+if [ "$GLM_PRE_RC" -eq 64 ] \
+   && grep -qF -- "$PREFLIGHT_INTENT" "$TMP/preflight-glm.err" \
+   && grep -qF -- "$PREFLIGHT_FIX" "$TMP/preflight-glm.err" \
+   && grep -qF -- "$TMP/spec-no-marker.md" "$TMP/preflight-glm.err" \
+   && grep -qF -- "$MARKER" "$TMP/preflight-glm.err" \
+   && [ ! -e "$TMP/preflight-glm.canary" ] \
+   && [ ! -e "$TMP/preflight-glm.log" ] \
+   && [ ! -e "$TMP/preflight-glm.log.rc" ] \
+   && ! run_registered preflight-glm; then
+  pass=$((pass + 1))
+else
+  note "glm preflight: rc=$GLM_PRE_RC want=64; canary=$([ -e "$TMP/preflight-glm.canary" ] && echo yes || echo no); log=$([ -e "$TMP/preflight-glm.log" ] && echo yes || echo no); err=$(cat "$TMP/preflight-glm.err" 2>/dev/null)"
+fi
+unset FAKE_PROVIDER_CANARY
+
+if [ "$GROK_PRE_RC" -eq 64 ] && [ "$GLM_PRE_RC" -eq 64 ] \
+   && grep -qF -- "$PREFLIGHT_INTENT" "$TMP/preflight-grok.err" \
+   && grep -qF -- "$PREFLIGHT_INTENT" "$TMP/preflight-glm.err"; then
+  pass=$((pass + 1))
+else
+  note "preflight parity: grok rc=$GROK_PRE_RC glm rc=$GLM_PRE_RC (want both 64 and the shared intent line)"
+  echo "      grok stderr: $(cat "$TMP/preflight-grok.err" 2>/dev/null)" >&2
+  echo "      glm  stderr: $(cat "$TMP/preflight-glm.err" 2>/dev/null)" >&2
+fi
+
+# ── Part 2: plan quotes the marker, final report does not → absent ───────
+# Same log shape on both launchers (grok ndjson / last-report-readable
+# JSONL). A whole-log grep would report found; the report-scope check
+# must not.
+
+run_grok_ndjson() {  # <label> <ndjson>
+  local label="$1"
+  unset FAKE_GROK_TEXT
+  FAKE_GROK_NDJSON="$2"
+  export FAKE_GROK_NDJSON
+  LOG="$TMP/${label}.ndjson"
+  rm -f "$LOG" "$LOG.rc"
+  set +e
+  GROK_ERR="$TMP/${label}.wrapper.err"
+  bash "$GROK_RUN" --cwd "$TMP/cwd" --spec "$TMP/spec.md" --log "$LOG" \
+    --label "$label" --done-marker "$MARKER" >"$TMP/${label}.out" 2>"$GROK_ERR"
+  GROK_RC=$?
+  set -e
+}
+
+run_grok_ndjson "grok-plan-quote" "$PLAN_QUOTES_MARKER"
+if [ "$GROK_RC" -eq 72 ] \
+   && grep -q '^done_marker=absent$' "$LOG.rc" \
+   && grep -q '^done_marker_scope=report$' "$LOG.rc" \
+   && grep -qF -- "$INTENT" "$GROK_ERR"; then
+  pass=$((pass + 1))
+else
+  note "grok plan-quote: rc=$GROK_RC want=72+absent+scope=report; sentinel=$(cat "$LOG.rc" 2>/dev/null); err=$(cat "$GROK_ERR")"
+fi
+GROK_PLAN_RC=$GROK_RC
+GROK_PLAN_SENTINEL="$(cat "$LOG.rc" 2>/dev/null || true)"
+
+run_glm "glm-plan-quote" "$PLAN_QUOTES_MARKER"
+if [ "$GLM_RC" -eq 72 ] \
+   && grep -q '^done_marker=absent' "$LOG.rc" \
+   && grep -q '^done_marker_scope=report$' "$LOG.rc" \
+   && grep -qF -- "$INTENT" "$GLM_ERR"; then
+  pass=$((pass + 1))
+else
+  note "glm plan-quote: rc=$GLM_RC want=72+absent+scope=report; sentinel=$(cat "$LOG.rc" 2>/dev/null); err=$(cat "$GLM_ERR")"
+fi
+GLM_PLAN_RC=$GLM_RC
+GLM_PLAN_SENTINEL="$(cat "$LOG.rc" 2>/dev/null || true)"
+
+if [ "$GROK_PLAN_RC" -eq 72 ] && [ "$GLM_PLAN_RC" -eq 72 ] \
+   && printf '%s\n' "$GROK_PLAN_SENTINEL" | grep -q '^done_marker_scope=report$' \
+   && printf '%s\n' "$GLM_PLAN_SENTINEL" | grep -q '^done_marker_scope=report$'; then
+  pass=$((pass + 1))
+else
+  note "plan-quote parity: grok rc=$GROK_PLAN_RC glm rc=$GLM_PLAN_RC (want both 72, both scope=report)"
+  echo "      grok sentinel: $GROK_PLAN_SENTINEL" >&2
+  echo "      glm  sentinel: $GLM_PLAN_SENTINEL" >&2
 fi
 
 echo "done-marker: $pass passed, $fail failed"

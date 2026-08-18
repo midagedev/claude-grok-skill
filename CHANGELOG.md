@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.3 — 2026-08-18 — refuse a done-marker the spec never asked for
+
+- **`--done-marker X` is refused (exit 64) when the spec does not contain
+  `X`.** Three rounds this session launched with a marker their specs never
+  mentioned; all three delivered the work and all three reported `absent`.
+  The 72 we just added names that absence as the round's failure, but the
+  delegate was never told to print the string — neither launcher injects it
+  into the prompt, and nothing checked the spec. That is a usage error by
+  the caller, caught before the provider is contacted and before the
+  registry records a round. 64 is already usage on both launchers; 72 stays
+  "the round ran and the report lacks the marker."
+- **Both launchers now look for the marker in the final report** (via
+  `last-report.sh`). A plan that quotes the marker, an echoed spec, or a
+  tool result used to count as `found` on the zai launcher because it
+  grepped the whole log. crush's `--log` is the model's stdout as plain
+  text, not JSONL, so that harness alone still greps the log when
+  `last-report.sh` cannot extract a report, and the sentinel records
+  `done_marker_scope=report|log` so the two verdicts are not the same word
+  for different facts.
+- **Docs** (`SKILL.md`, `spec-template.md`, `spec-authoring.md`) state that
+  `--done-marker` requires the completion-marker last line.
+
 ## 0.10.2 — 2026-08-18 — a missing done-marker is one fact, one exit code
 
 - **`--done-marker` absent is exit 72 on both launchers.** The two sisters

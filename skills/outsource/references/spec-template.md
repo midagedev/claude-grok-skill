@@ -62,4 +62,6 @@ new looks is banned); end with per-axis self-verdicts (SHIP/FIX predictions):
 - No git state changes (lead commits). Writable: outputs + scratch only.
 
 ## Last line
+Required when launching with `--done-marker` (the launcher refuses if this
+exact string is missing). It is the contract the delegate prints.
 DONE-<track>
