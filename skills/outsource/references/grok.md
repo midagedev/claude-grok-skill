@@ -38,9 +38,10 @@ nohup bash <skill-dir>/bin/grok-run.sh \
 It registers the round in `runs.sh` (the status line sees it), verifies grok
 actually started (ndjson must grow within 30s, else exit 69 out loud), writes
 the same `<log>.rc` sentinel shape as the zai launcher — including
-`done_marker=found|absent`, with rc downgraded to 70 when a clean exit lacks
-the marker in the final report — and owns the git-policy profiles below so
-they stop being copy-pasted into shells. Read the round's report with
+`done_marker=found|absent`, with rc downgraded to 72 when a clean exit lacks
+the marker in the final report (70 is the zai launcher's model-identity
+failure, not this) — and owns the git-policy profiles below so they stop
+being copy-pasted into shells. Read the round's report with
 `bin/last-report.sh <log>`.
 
 Prepend the shared preamble to the task spec first (`cat

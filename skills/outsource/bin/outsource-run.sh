@@ -75,6 +75,7 @@
 #             66 --require-quota floor missed, or not evaluable
 #             69 harness CLI missing
 #             70 model-identity assertion failed (mismatch or unverifiable)
+#             72 --done-marker set, the harness exited 0, the marker is absent
 #            124 --max-seconds ceiling hit; the harness was killed
 #              1 missing credential
 set -euo pipefail
@@ -160,7 +161,7 @@ mkdir -p "$CONFIG_DIR"
 # launch a spec that references an image file; an empty cell means "cannot".
 if [ "$NO_VISION_CHECK" -eq 0 ] && [ "$(provider_field "$PROVIDER" "$T_VISION")" != yes ] \
    && grep -qiE -- '\.(png|jpe?g|webp|gif)([^[:alnum:]]|$)' "$SPEC"; then
-  echo "outsource: spec $SPEC references an image file, but provider '$PROVIDER' cannot see images (vision=$(provider_field "$PROVIDER" "$T_VISION") in the provider table); vision work belongs to the grok backend (references/grok.md). Re-run with --no-vision-check to override." >&2
+  echo "outsource: spec $SPEC references an image file, but provider '$PROVIDER' cannot see images (vision=$(provider_field "$PROVIDER" "$T_VISION") in the provider table). This guard refuses a pixel verdict — a spec that only names an image as an artifact (capture harness, pixel-decoding script; see references/glm.md) wants --no-vision-check; a spec that asks the model to look at pixels wants a vision-capable backend (references/grok.md)." >&2
   exit 65
 fi
 
@@ -259,34 +260,41 @@ runs_note_finish() {  # <rc> — idempotent; the EXIT trap and finish() both cal
 }
 
 finish() {  # <exit-code> — sentinel + SESSION line + exit, both harnesses
-  runs_note_finish "$1"
-  if [ -n "$LOG" ]; then
-    # rc is a *lifecycle* signal: the harness exited cleanly. It says nothing
-    # about whether the round did its job. Both halves of that gap have been
-    # measured on the same day (2026-08-16): one round exited rc=0 having
-    # written no code at all, and another exited rc=0 with no edits because the
-    # spec's own precondition check told it to stop — the first is a failure,
-    # the second is correct, and rc cannot tell them apart. When the lead names
-    # the spec's completion marker with --done-marker, record whether the
-    # transcript actually carries it, so the difference is one file read away
-    # instead of a transcript hunt.
-    marker_line=""
-    if [ -n "$DONE_MARKER" ]; then
-      if [ -s "$LOG" ] && grep -qF -- "$DONE_MARKER" "$LOG" 2>/dev/null; then
-        marker_line="done_marker=found"
-      else
-        marker_line="done_marker=absent"
+  local rc="$1"
+  # rc is a *lifecycle* signal: the harness exited cleanly. It says nothing
+  # about whether the round did its job. Both halves of that gap have been
+  # measured on the same day (2026-08-16): one round exited rc=0 having
+  # written no code at all, and another exited rc=0 with no edits because the
+  # spec's own precondition check told it to stop — the first is a failure,
+  # the second is correct, and rc cannot tell them apart. When the lead names
+  # the spec's completion marker with --done-marker, record whether the
+  # transcript actually carries it, so the difference is one file read away
+  # instead of a transcript hunt. A clean exit with the marker absent is
+  # exit 72 (same code, same-intent stderr as grok-run.sh) so a watcher
+  # cannot read rc=0 as delivered. 70 stays model-identity.
+  local marker_line=""
+  if [ -n "$LOG" ] && [ -n "$DONE_MARKER" ]; then
+    if [ -s "$LOG" ] && grep -qF -- "$DONE_MARKER" "$LOG" 2>/dev/null; then
+      marker_line="done_marker=found"
+    else
+      marker_line="done_marker=absent"
+      if [ "$rc" -eq 0 ]; then
+        echo "outsource: the round finished but --done-marker '$DONE_MARKER' is absent; not claiming a pass (exit 72). Judge by the tree, not this exit code." >&2
+        rc=72
       fi
-      marker_line="$marker_line ($DONE_MARKER)"$'\n'
     fi
+    marker_line="$marker_line ($DONE_MARKER)"$'\n'
+  fi
+  runs_note_finish "$rc"
+  if [ -n "$LOG" ]; then
     if ! printf 'rc=%s\nfinished=%s\nharness=%s\nprovider=%s\nmodel_requested=%s\nmodel_actual=%s\nsession=%s\n%s' \
-        "$1" "$(date -u +%FT%TZ)" "$HARNESS" "$PROVIDER" "$MODEL" "$MODEL_ACTUAL" "$SID" "$marker_line" \
+        "$rc" "$(date -u +%FT%TZ)" "$HARNESS" "$PROVIDER" "$MODEL" "$MODEL_ACTUAL" "$SID" "$marker_line" \
         > "$LOG.rc"; then
       echo "outsource: warning: could not write sentinel $LOG.rc" >&2
     fi
   fi
   echo "SESSION ${SID:-unknown}"
-  exit "$1"
+  exit "$rc"
 }
 
 # Register once the round is actually going to be attempted — after the

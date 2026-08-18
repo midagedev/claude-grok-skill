@@ -34,10 +34,18 @@
 #   - Writes `<log>.rc` on every path (including our own failures), with
 #     rc / finished / harness=grok-cli / provider=xai / model / session /
 #     done_marker=found|absent — the same keys the zai launcher writes, so
-#     one watcher shape fits every backend.
+#     one watcher shape fits every backend. A clean exit without the marker
+#     is exit 72 (not 70 — that is model-identity on the zai launcher).
 #   - The done marker is looked for in the round's final report (via
 #     last-report.sh), not anywhere in the stream — a marker quoted early in
 #     planning must not count as completion.
+#
+# Exit codes: 64 usage (unknown flag / git profile, missing required flags)
+#             66 no such cwd, or unreadable spec
+#             69 grok CLI missing, or the process exited without writing
+#             71 EXIT trap: no sentinel was written (script bug / set -u)
+#             72 --done-marker set, clean exit, marker absent from the report
+#              * the child's own rc otherwise
 #
 # Foreground by design: run the whole invocation under nohup/& yourself,
 # exactly one background layer, same as outsource-run.sh. Foreground makes
@@ -189,7 +197,11 @@ if [ -n "$MARKER" ] && [ -x "$LAST_REPORT" ]; then
   if "$LAST_REPORT" "$LOG" 2>/dev/null | grep -qF -- "$MARKER"; then verdict="found"; fi
   # A zero exit without the marker in the report is the lie the sentinel
   # exists to catch: downgrade it so no watcher reads rc=0 as delivered.
-  if [ "$rc" -eq 0 ] && [ "$verdict" = "absent" ]; then rc=70; fi
+  # 72 is this case only — 70 is the zai launcher's model-identity failure.
+  if [ "$rc" -eq 0 ] && [ "$verdict" = "absent" ]; then
+    echo "grok-run.sh: the round finished but --done-marker '$MARKER' is absent; not claiming a pass (exit 72). Judge by the tree, not this exit code." >&2
+    rc=72
+  fi
 fi
 write_sentinel "$rc" "$verdict"
 [ -n "$RUN_ID" ] && "$RUNS" finish "$RUN_ID" --rc "$rc" --session "$SID" >/dev/null 2>&1

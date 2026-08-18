@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.10.2 — 2026-08-18 — a missing done-marker is one fact, one exit code
+
+- **`--done-marker` absent is exit 72 on both launchers.** The two sisters
+  used to answer the same fact in opposite ways: `grok-run.sh` downgraded a
+  clean exit to 70, `outsource-run.sh` left rc=0 and only wrote
+  `done_marker=absent` in the sentinel. Three delivered rounds in one
+  session then showed up as `failed with exit code 70` or `completed`
+  depending on which launcher ran them, and the lead nearly discarded a
+  faithful research report. 70 was already the documented model-identity
+  failure (`mismatch or unverifiable`), so a missing marker and a remapped
+  model were indistinguishable. 72 is this case only. Both launchers now
+  print one stderr line naming the missing string and leaving the verdict
+  on the tree. The noisy fail stays — a silent rc=0 that lets an unfinished
+  round through is the more expensive lie.
+- **Vision-guard copy** still refuses a spec that names an image file on a
+  provider that cannot see pixels (condition unchanged). The message now
+  distinguishes a pixel *verdict* (change backend) from naming an image as
+  an *artifact* — capture harness, pixel-decoding script; that path wants
+  `--no-vision-check`, as `references/glm.md` already allowed.
+- **`tests/done-marker.test.sh`** (new) — FAIL-first against the pre-fix
+  sources (grok 70 / GLM 0, no stderr line), then the three contracts
+  (found → 0, absent → 72 + line, both launchers agree) plus the 70
+  identity regression.
+
 ## 0.10.1 — 2026-08-17 — a signal to the wrapper is not a verdict on the round
 
 - **`bin/signal-hold.sh`** (new, sourced by both launchers) — TERM/INT/HUP to

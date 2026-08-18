@@ -90,15 +90,17 @@ git ban** (hooks fire only on top-level tool calls) — only for tasks with
 zero repository-state risk; `--label <name>` names the track in the run
 registry; `--max-seconds N` kills the harness at N seconds (exit 124);
 `--done-marker <string>` records in the sentinel whether the transcript
-carries the spec's completion marker (`done_marker=found|absent`).
+carries the spec's completion marker (`done_marker=found|absent`). A clean
+harness exit without the marker is **exit 72** (same code and same-intent
+stderr as `grok-run.sh`). 70 stays the model-identity assertion.
 
 Pass `--done-marker` whenever the task spec ends with one, because **`rc=0`
 only means the harness exited cleanly.** Measured on one day: a round exited
 `rc=0` having written no code (it mistook itself for the lead — see
 preamble §0), and another exited `rc=0` with no edits because the spec's own
 precondition check correctly told it to stop. The first is a lost round, the
-second is a good one, and the exit code is identical. The marker separates
-them without opening the transcript.
+second is a good one; 72 names only the missing marker. The tree still
+separates those two without opening the transcript.
 
 **Rounds run long, and that is usually fine.** Measured on ten delivered
 rounds: 13 minutes to **1h50m**, duration tracking message count almost

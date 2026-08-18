@@ -227,6 +227,7 @@ Every row is a mechanism with an exit code, not advice in a document.
 | grok blocked from producing its own required evidence | **Per-subcommand git denies.** A blanket `git worktree*` also blocked `git worktree list`, which every spec asks for as the first line of the report. |
 | The plan runs dry mid-round | **`--require-quota N`, exit 66** — keyed on the **tightest** window, not the shortest (measured: weekly at 81.7% remaining while the 5-hour sat at 83.8%). Fails closed. |
 | A delegate reports "done" that isn't | **Completion sentinel `<log>.rc`** with `rc`, `finished`, `harness`, `provider`, `model_requested`, `model_actual`, `session`. The harness's own lifecycle is not completion proof. |
+| A clean exit without the spec's completion marker | **`--done-marker`, exit 72** on both launchers. Was 70 on grok (colliding with model-identity) and a silent rc=0 on GLM, so the same fact read as failed or completed depending on the sister. 72 names the missing marker; the tree is still the verdict. |
 | Repository-state git from a delegate | **`bin/git-guard.sh`**, a `PreToolUse` hook parsing the real command string — `git -C … commit`, `env … git push`, `sudo git …`, chained mutations all blocked; read-only git deliberately open. One file, both harnesses' calling conventions. |
 
 <details>
@@ -263,7 +264,7 @@ bin/spec-lint.sh --root <repo> <scratch>/spec.md     # 0 clean · 1 findings
 bin/outsource-run.sh --require-quota 15 …            # 66 if the plan is too low
 ```
 
-**After the round** — the model-identity assertion (exit 70), the completion sentinel, and a cost line carrying the round's token counts from the log's `usage`. The `total_cost_usd` beside them is Anthropic-priced and wrong for every provider here.
+**After the round** — the model-identity assertion (exit 70), the done-marker check (exit 72 when a clean exit lacks the marker), the completion sentinel, and a cost line carrying the round's token counts from the log's `usage`. The `total_cost_usd` beside them is Anthropic-priced and wrong for every provider here.
 
 Plan credits are deliberately **not** reported per round: a plan quota is a plan-wide counter that concurrent rounds and other sessions move too, so a before/after delta around one round measures the machine, not the round. Quota is a pre-flight signal — which provider this session should use, and whether to start at all.
 
