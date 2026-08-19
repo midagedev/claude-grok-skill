@@ -20,8 +20,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/midagedev/outsource/internal/guard"
 	"github.com/midagedev/outsource/internal/report"
 	"github.com/midagedev/outsource/internal/runs"
+	"github.com/midagedev/outsource/internal/speclint"
 	"github.com/midagedev/outsource/internal/statusline"
 )
 
@@ -40,8 +42,10 @@ func noStdin(f func(args []string, stdout, stderr io.Writer) int) func([]string,
 }
 
 var tools = []tool{
+	{"guard", guard.Main},
 	{"last-report", noStdin(report.Main)},
 	{"runs", noStdin(runs.Main)},
+	{"spec-lint", noStdin(speclint.Main)},
 	{"statusline", statusline.Main},
 }
 
