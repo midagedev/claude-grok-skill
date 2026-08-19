@@ -44,7 +44,22 @@ ok "bare invocation lists a running round" 0 "$rc" "$out" "bare-check" "-"
 
 # 3. The explicit form and the default form must agree — a fix that only
 #    repaired one of them would leave the docs lying in the other direction.
-bare="$(bash "$RUNS" 2>&1)"; explicit="$(bash "$RUNS" list 2>&1)"
+#
+#    The two elapsed columns are blanked before comparing, and that is not a
+#    weakening. ELAPSED renders in seconds for a round this young, so two
+#    invocations that straddle a second boundary printed "2s" and "3s" and this
+#    case failed — measured twice in about thirty suite runs, and reproduced
+#    deliberately by sleeping 1s between the calls. What this case protects is
+#    that the default verb IS `list`; that the columns themselves are right is
+#    asserted by runs-owner. A test that fails on the clock teaches people to
+#    re-run the suite until it is green, which costs more than the case is worth.
+#
+#    Columns 41-55 are ELAPSED and IDLE in the fixed-width listing format, and
+#    the same blanking is applied to both sides, so it cannot hide a real
+#    difference anywhere else on the line.
+blank_clock() { sed 's/^\(.\{40\}\).\{0,15\}/\1               /'; }
+bare="$(bash "$RUNS" 2>&1 | blank_clock)"
+explicit="$(bash "$RUNS" list 2>&1 | blank_clock)"
 [ "$bare" = "$explicit" ] && ok "bare == list" 0 0 "" "-" "-" \
   || ok "bare == list" 0 1 "bare:[$bare] list:[$explicit]" "-" "-"
 
