@@ -57,15 +57,10 @@ new looks is banned); end with per-axis self-verdicts (SHIP/FIX predictions):
 - [ ] <captures/artifacts with exact output paths; zero console errors>
 - [ ] <regression gates for neighboring systems>
 
-For research/audit rounds (no gates): state "no gates for this round" in the
-report — never fabricate gate output to fill the section. (Measured: a round
-drafted invented FAIL output three times trying to satisfy this section.)
-
-## Research-round data (audit/investigation specs only)
-Any tracker issue the spec excludes or references gets a one-line summary
-inline — the delegate may not be able to query the tracker (CLI denials
-measured at 2–8 turns per round), and "excluded by number only" degrades the
-audit. Name the mirror schema version if the round will query a profile DB.
+Research/audit rounds with no gates: write "no gates for this round" —
+never fabricate gate output to fill the section. And give every tracker
+issue the spec excludes or references a one-line summary inline; the
+delegate may not be able to query the tracker.
 
 ## Environment
 - <worktree path if isolated; ports; where to copy final artifacts before reporting>

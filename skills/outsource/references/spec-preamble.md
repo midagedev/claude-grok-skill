@@ -206,31 +206,19 @@ criteria.**
 - If you become convinced an unlisted file must be touched, **don't — report
   it** with the reason and let the lead extend the list.
 
-## 9. File moves and renames
+## 9. File moves and renames (skip unless this task moves/renames files)
 
-- Moving a file breaks references in **both directions**: (a) relative links
-  *inside* the moved file now resolve from a new depth (`../foo` may need to
-  become `../../foo`), and (b) files elsewhere that point *at* the old path.
-  After a move, grep both directions and fix both. (One move fixed 15
-  inbound links but missed 11 outbound links whose depth had changed.)
-- **Files referenced by `.claude/**`, `CLAUDE.md`, or skills/rules: report
-  before moving them.** Moving breaks agent context, and repointing the
-  skill's link into an archive is not a fix — whether the target must stay
-  live is the lead's call, made *before* the move.
-- Verification: compare broken-link counts before and after the move with an
-  **executable check that also covers references from code files** — never
-  an `.md → .md`-only link checker (one PR claimed "0 newly broken" on that
-  basis while 15 code-file references broke; another PR's very line that
-  "fixed" a broken link was itself broken). Report **"newly broken: 0" as a
-  number**, not as a claim.
+- A move breaks references in both directions — links inside the moved file
+  (relative depth changed) and files pointing at the old path. Grep both,
+  fix both, and report **"newly broken: 0" as a number** from an executable
+  check that also covers code files, never an `.md → .md`-only checker.
+- Files referenced by `.claude/**`, `CLAUDE.md`, or skills: report before
+  moving — whether the target must stay live is the lead's call.
 
-## 10. Hot paths
+## 10. Hot paths (skip unless you touched a per-render/per-request path)
 
-- If you added allocations or O(n) scans to a per-render / per-keystroke /
-  per-request path, report it. For conditional features, **the disabled path
-  must be byte-identical to the old path.**
-  - A grouping feature once allocated a full row slice every render even
-    with grouping off.
+- Report added allocations or O(n) scans on such paths. For conditional
+  features, the disabled path must be byte-identical to the old path.
 
 ## 11. Absolute bans
 
@@ -252,9 +240,7 @@ criteria.**
 # Final report format (missing items = incomplete)
 
 Completion verdicts, the DONE marker, and gate output belong in the final
-message only — never rehearse them mid-round. (Measured 2026-08-20: drafted
-"all green" reports and DONE lines appeared in thinking before any work,
-up to 24 repetitions of one plan; none leaked, but the tokens did.)
+message only — never draft them mid-round.
 
 1. Changed/new file list + one line each
 2. The task spec's completion-criteria commands with **their real output**
