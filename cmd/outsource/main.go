@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/midagedev/outsource/internal/cred"
 	"github.com/midagedev/outsource/internal/guard"
@@ -28,6 +29,7 @@ import (
 	"github.com/midagedev/outsource/internal/runs"
 	"github.com/midagedev/outsource/internal/speclint"
 	"github.com/midagedev/outsource/internal/statusline"
+	"github.com/midagedev/outsource/internal/telemetry"
 )
 
 // tool is one dispatchable command.
@@ -55,6 +57,7 @@ var tools = []tool{
 	{"runs", noStdin(runs.Main)},
 	{"spec-lint", noStdin(speclint.Main)},
 	{"statusline", statusline.Main},
+	{"telemetry", noStdin(telemetry.ReportMain)},
 }
 
 // toolFor resolves a name to a tool. The `.sh` suffix is accepted because the
@@ -77,16 +80,27 @@ func names() string {
 	return strings.Join(out, "|")
 }
 
+// run is the single choke point every tool passes through, which is what makes
+// telemetry a few lines instead of an instrumentation project: the exit code, the
+// duration and the flag names are all visible here, and the tools only have to
+// supply a reason when they know one.
+func run(t *tool, args []string) {
+	started := time.Now()
+	rc := t.main(args, os.Stdin, os.Stdout, os.Stderr)
+	telemetry.Record(t.name, args, rc, started)
+	os.Exit(rc)
+}
+
 func main() {
 	// argv[0] first: invoked through one of its tool names, every argument
 	// belongs to that tool.
 	if t := toolFor(os.Args[0]); t != nil {
-		os.Exit(t.main(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+		run(t, os.Args[1:])
 	}
 	// Otherwise the first argument selects the tool: `outsource runs list`.
 	if len(os.Args) > 1 {
 		if t := toolFor(os.Args[1]); t != nil {
-			os.Exit(t.main(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+			run(t, os.Args[2:])
 		}
 		fmt.Fprintf(os.Stderr, "outsource: unknown tool: %s (have: %s)\n", os.Args[1], names())
 		os.Exit(runs.ExitUsage)

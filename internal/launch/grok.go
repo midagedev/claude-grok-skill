@@ -13,6 +13,7 @@ import (
 
 	"github.com/midagedev/outsource/internal/report"
 	"github.com/midagedev/outsource/internal/runs"
+	"github.com/midagedev/outsource/internal/telemetry"
 )
 
 // Exit codes are the contract watchers branch on.
@@ -133,6 +134,7 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 	// and before registering a round.
 	if o.marker != "" && !strings.Contains(string(specBody), o.marker) {
 		fmt.Fprintf(stderr, "grok-run: --done-marker '%s' does not appear in the spec (%s). Add that exact string as the spec's last line (the completion marker), then relaunch.\n", o.marker, o.spec)
+		telemetry.Note("why", "done-marker not present in the spec")
 		return ExitUsage
 	}
 	// --json-schema and --done-marker cannot both be satisfied. The marker is
@@ -145,6 +147,7 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 		for _, a := range o.extra {
 			if a == "--json-schema" || strings.HasPrefix(a, "--json-schema=") {
 				fmt.Fprintln(stderr, "grok-run: --done-marker and --json-schema are mutually exclusive — under a schema the final report IS the JSON object, so the marker can never appear in it. Drop --done-marker (completion = rc 0 + schema-valid stdout), or add a marker field inside the schema.")
+				telemetry.Note("why", "done-marker and --json-schema are mutually exclusive")
 				return ExitUsage
 			}
 		}
@@ -275,6 +278,7 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stderr, "grok-run: grok never produced output (rc=%d) — stderr follows:\n", rc)
 		fmt.Fprint(stderr, tailLines(base+".err", 5))
+		telemetry.Note("why", "provider produced no output")
 		writeSentinel(rc, "absent")
 		finishRun(runID, rc, sid, "")
 		return rc
@@ -298,6 +302,7 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 		// is this case only — 70 is the zai launcher's model-identity failure.
 		if rc == 0 && verdict == "absent" {
 			fmt.Fprintf(stderr, "grok-run: the round finished but --done-marker '%s' is absent; not claiming a pass (exit 72). Judge by the tree, not this exit code.\n", o.marker)
+			telemetry.Note("why", "round finished, completion marker absent")
 			rc = ExitNoMarker
 		}
 	}

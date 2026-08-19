@@ -22,6 +22,7 @@ package guard
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/midagedev/outsource/internal/telemetry"
 	"io"
 	"os"
 	"regexp"
@@ -141,6 +142,15 @@ func Main(_ []string, stdin io.Reader, _ io.Writer, stderr io.Writer) int {
 	cmd := commandFrom(os.Getenv, stdin, isTTY)
 	if blocked, msg := Verdict(cmd); blocked {
 		fmt.Fprintln(stderr, msg)
+		// Which KIND was blocked, never the command itself: a command line can
+		// carry an env assignment or a path, and this file is meant to be safe to
+		// read months later. A count of these is the most useful number in the log
+		// — it says which delegates keep trying to do the lead's job.
+		which := "git"
+		if msg == msgGH {
+			which = "gh"
+		}
+		telemetry.Note("why", "blocked "+which)
 		return ExitBlocked
 	}
 	return 0

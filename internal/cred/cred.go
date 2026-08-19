@@ -13,6 +13,7 @@ package cred
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/midagedev/outsource/internal/telemetry"
 	"io"
 	"net/url"
 	"os"
@@ -347,6 +348,7 @@ func KeyOrExplain(provider string, stderr io.Writer) (string, bool) {
 			return v, true
 		}
 	}
+	telemetry.Note("why", "no credential found for "+provider)
 	fmt.Fprintf(stderr, "outsource: no API key for provider '%s'. Tried, in order:\n", provider)
 	for _, t := range tried {
 		fmt.Fprintf(stderr, "  - %s\n", t)

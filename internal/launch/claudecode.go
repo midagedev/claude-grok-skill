@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/midagedev/outsource/internal/cred"
+	"github.com/midagedev/outsource/internal/telemetry"
 )
 
 // runClaudeCode drives `claude -p` against the provider's Anthropic-compatible
@@ -145,10 +146,12 @@ func (r *round) runClaudeCode() int {
 		case "mismatch":
 			fmt.Fprintf(r.stderr, "outsource: MODEL MISMATCH — requested '%s' but the run was answered by: %s (evidence: %s); failing the round (exit 70)\n",
 				r.o.model, orUnknown(a.actual), orNone(a.source))
+			telemetry.Note("why", "model mismatch: another model answered")
 			assertCode = ExitModelIdentity
 		case "unverifiable":
 			fmt.Fprintf(r.stderr, "outsource: MODEL ASSERTION FAILED — no session transcript for session '%s', and modelUsage only echoes the requested id, so it cannot prove '%s' actually answered; not claiming a pass (exit 70)\n",
 				orUnknown(a.session), r.o.model)
+			telemetry.Note("why", "model unverifiable: no session transcript")
 			assertCode = ExitModelIdentity
 		default:
 			fmt.Fprintf(r.stderr, "outsource: MODEL ASSERTION FAILED — no model-identity evidence in %s (modelUsage absent/unparseable and no session transcript); cannot verify that '%s' answered, so not claiming a pass (exit 70)\n",

@@ -15,6 +15,7 @@ import (
 	"github.com/midagedev/outsource/internal/cred"
 	"github.com/midagedev/outsource/internal/quota"
 	"github.com/midagedev/outsource/internal/report"
+	"github.com/midagedev/outsource/internal/telemetry"
 )
 
 // Exit codes specific to the zai launcher. 64/72 are shared with grok-run and
@@ -188,6 +189,7 @@ func OutsourceMain(args []string, stdout, stderr io.Writer) int {
 	// grok launcher.
 	if o.doneMarker != "" && !strings.Contains(string(specBody), o.doneMarker) {
 		fmt.Fprintf(stderr, "outsource: --done-marker '%s' does not appear in the spec (%s). Add that exact string as the spec's last line (the completion marker), then relaunch.\n", o.doneMarker, o.spec)
+		telemetry.Note("why", "done-marker not present in the spec")
 		return ExitUsage
 	}
 
@@ -196,6 +198,7 @@ func OutsourceMain(args []string, stdout, stderr io.Writer) int {
 	if !o.noVisionCheck && !p.vision && imageRef.Match(specBody) {
 		fmt.Fprintf(stderr, "outsource: spec %s references an image file, but provider '%s' cannot see images (vision=%s in the provider table). This guard refuses a pixel verdict — a spec that only names an image as an artifact (capture harness, pixel-decoding script; see references/glm.md) wants --no-vision-check; a spec that asks the model to look at pixels wants a vision-capable backend (references/grok.md).\n",
 			o.spec, o.providerName, yesNo(p.vision))
+		telemetry.Note("why", "vision guard: spec names an image, provider is blind")
 		return ExitVisionRefused
 	}
 
@@ -209,6 +212,7 @@ func OutsourceMain(args []string, stdout, stderr io.Writer) int {
 		case 0:
 		case quota.ExitGated:
 			fmt.Fprintf(stderr, "outsource: refusing to launch — provider '%s' is below the --require-quota %s%% floor (reason above). Wait for the reset or run this track on another provider.\n", o.providerName, o.requireQuota)
+			telemetry.Note("why", "quota floor: plan too low to start")
 			return ExitQuotaFloor
 		case quota.ExitUsage:
 			// quota knows a different provider set: it reads PLAN quotas, so it
@@ -321,6 +325,7 @@ func (r *round) finish(rc int) int {
 			verdict, r.o.doneMarker, scope)
 		if verdict == "absent" && rc == 0 {
 			fmt.Fprintf(r.stderr, "outsource: the round finished but --done-marker '%s' is absent; not claiming a pass (exit 72). Judge by the tree, not this exit code.\n", r.o.doneMarker)
+			telemetry.Note("why", "round finished, completion marker absent")
 			rc = ExitNoMarker
 		}
 	}
