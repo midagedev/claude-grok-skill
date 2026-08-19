@@ -32,6 +32,7 @@ BIN=outsource
 # that resolves to both a script and the binary is exactly the drift this port
 # exists to remove.
 SHIMS=(
+  "credential.sh:credential"
   "git-guard.sh:guard"
   "last-report.sh:last-report"
   "quota.sh:quota"

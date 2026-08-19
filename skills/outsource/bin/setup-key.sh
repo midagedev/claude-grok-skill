@@ -49,34 +49,24 @@ IFS= read -rs KEY </dev/tty
 printf '\n' >&2
 [ -n "$KEY" ] || { echo "setup-key.sh: nothing entered; no change made." >&2; exit 1; }
 
-# Validate before storing, so a typo fails here instead of mid-round.
-# Only zai has a free read-only endpoint to check against; xai's would cost
-# a real request, so it is stored unverified and said so.
-if [ "$PROVIDER" = zai ]; then
-  printf 'checking the key against z.ai... ' >&2
-  BODY="$(printf 'header = "Authorization: Bearer %s"\n' "$KEY" \
-          | curl -sS --max-time 20 -K - https://api.z.ai/api/monitor/usage/quota/limit 2>/dev/null || true)"
-  # This endpoint answers a bad credential with HTTP 200 and success:false,
-  # so the body decides, not the status line.
-  if ! printf '%s' "$BODY" | python3 -c 'import json,sys
-try:
-    d = json.load(sys.stdin)
-except Exception:
-    sys.exit(1)
-sys.exit(0 if d.get("success") is True and d.get("code") == 200 else 1)' 2>/dev/null; then
-    MSG="$(printf '%s' "$BODY" | python3 -c 'import json,sys
-try:
-    print(json.load(sys.stdin).get("msg") or "")
-except Exception:
-    print("")' 2>/dev/null || true)"
-    printf 'rejected.\n' >&2
-    echo "setup-key.sh: z.ai did not accept that key${MSG:+ ($MSG)}. Nothing stored." >&2
-    exit 1
-  fi
-  printf 'accepted.\n' >&2
-else
-  echo "note: '$PROVIDER' has no free endpoint to verify against, so this key is stored unverified." >&2
-fi
+# Validate before storing, so a typo fails here instead of mid-round. The check
+# itself lives in the binary (`outsource verify-key`): it is an HTTP call and a
+# JSON verdict, which is exactly the work this file should not be doing in shell,
+# and it is where the endpoint's quirk is documented — a bad credential comes
+# back as HTTP 200 with success:false, so the body decides, not the status line.
+#
+# The key goes over a pipe, never an argument: an argument would show up in a
+# process listing. This file's remaining job is the part shell is actually right
+# for — a TTY check, a prompt with echo off, /dev/tty, and an atomic 0600 write.
+VERDICT="$(printf '%s' "$KEY" | "$BIN/outsource" verify-key "$PROVIDER" 2>&1)"; RC=$?
+case "$RC" in
+  0) printf 'checked against z.ai: accepted.\n' >&2 ;;
+  3) echo "note: '$PROVIDER' has no free endpoint to verify against, so this key is stored unverified." >&2 ;;
+  2) echo "setup-key.sh: could not reach z.ai to check the key. Nothing stored — re-run when you are online, or export \$$ENV_VAR to bypass the store." >&2
+     exit 1 ;;
+  *) echo "setup-key.sh: z.ai did not accept that key${VERDICT:+ ($VERDICT)}. Nothing stored." >&2
+     exit 1 ;;
+esac
 
 umask 077
 mkdir -p "$(dirname "$STORE")"

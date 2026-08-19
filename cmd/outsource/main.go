@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/midagedev/outsource/internal/cred"
 	"github.com/midagedev/outsource/internal/guard"
 	"github.com/midagedev/outsource/internal/quota"
 	"github.com/midagedev/outsource/internal/report"
@@ -43,6 +44,8 @@ func noStdin(f func(args []string, stdout, stderr io.Writer) int) func([]string,
 }
 
 var tools = []tool{
+	{"credential", noStdin(cred.Main)},
+	{"verify-key", func(a []string, in io.Reader, out, err io.Writer) int { return cred.VerifyMain(a, out, err, in) }},
 	{"guard", guard.Main},
 	{"last-report", noStdin(report.Main)},
 	{"quota", noStdin(quota.Main)},
