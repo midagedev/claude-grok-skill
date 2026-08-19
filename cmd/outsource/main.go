@@ -51,6 +51,7 @@ var tools = []tool{
 	{"verify-key", func(a []string, in io.Reader, out, err io.Writer) int { return cred.VerifyMain(a, out, err, in) }},
 	{"guard", guard.Main},
 	{"grok-run", noStdin(launch.GrokMain)},
+	{"wait", noStdin(launch.WaitMain)},
 	{"outsource-run", noStdin(launch.OutsourceMain)},
 	{"last-report", noStdin(report.Main)},
 	{"quota", noStdin(quota.Main)},

@@ -49,7 +49,10 @@ the same `<log>.rc` sentinel shape as the zai launcher — including
 the marker in the final report (70 is the zai launcher's model-identity
 failure, not this) — and owns the git-policy profiles below so they stop
 being copy-pasted into shells. Read the round's report with
-`bin/last-report.sh <log>`.
+`bin/last-report.sh <log>`. To block until one or more rounds finish
+(instead of hand-writing a `while [ ! -f $log.rc ]` loop per lane), run
+`outsource wait [--interval N] [--timeout N] <log>...` — it refuses a
+mistyped log path up front and prints each sentinel as it lands.
 
 Prepend the shared preamble to the task spec first (`cat
 <skill-dir>/references/spec-preamble.md <scratch>/task.md >

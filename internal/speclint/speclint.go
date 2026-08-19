@@ -347,12 +347,22 @@ func splitToken(s string, base int, out []token) []token {
 	for {
 		bt := strings.IndexByte(s[pos:], '`')
 		lb := strings.Index(s[pos:], "](")
+		// Interior parens are separators too: prose like
+		// "install-service(cmd/gadak/service.go — …)" glues a real path to a
+		// word, and the fused token neither resolves nor matches the tree —
+		// a false MISSING that costs an edit-relint cycle (measured
+		// 2026-08-20: three specs in one session). stripEdges only trims
+		// edges; the split has to happen here, where offsets stay exact.
+		pr := strings.IndexAny(s[pos:], "()")
 		i, ln := -1, 0
 		if bt >= 0 {
 			i, ln = pos+bt, 1
 		}
 		if lb >= 0 && (i < 0 || pos+lb < i) {
 			i, ln = pos+lb, 2
+		}
+		if pr >= 0 && (i < 0 || pos+pr < i) {
+			i, ln = pos+pr, 1
 		}
 		if i < 0 {
 			break

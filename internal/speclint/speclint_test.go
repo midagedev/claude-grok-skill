@@ -46,7 +46,10 @@ func TestSplitTokenKeepsOffsetsAndEmpties(t *testing.T) {
 	}{
 		{"plain.md", []token{{0, "plain.md"}}},
 		{"`a.md`", []token{{0, ""}, {1, "a.md"}, {6, ""}}},
-		{"[x](b.md)", []token{{0, "[x"}, {4, "b.md)"}}},
+		// Interior parens split too (2026-08-20): prose-glued paths like
+		// "word(a/b.go" used to fuse into one unresolvable token.
+		{"[x](b.md)", []token{{0, "[x"}, {4, "b.md"}, {9, ""}}},
+		{"svc(a/b.go", []token{{0, "svc"}, {4, "a/b.go"}}},
 		{"``", []token{{0, ""}, {1, ""}, {2, ""}}},
 		{"a`](b", []token{{0, "a"}, {2, ""}, {4, "b"}}},
 	} {
