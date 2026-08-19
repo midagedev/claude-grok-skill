@@ -51,8 +51,8 @@ So, explicitly:
 - **You cannot see the conversation that produced this spec.** An apparent
   contradiction with what the repository looks like is a question for the
   report (§6), not a mandate to take over.
-- Do not create directories under `scratch/` to stage work for others. One
-  progress log file (§12) is the whole footprint you are entitled to.
+- Do not create directories or files under `scratch/` to stage work for
+  others. Your report is the final message, not a file.
 
 In one sentence: **do nothing beyond satisfying this spec's completion
 criteria.**
@@ -247,20 +247,14 @@ criteria.**
   converge toward the numeric contract — that is verification, not taste.)
 - Comments follow **the language of the surrounding code** (varies by file).
 
-## 12. Progress checkpoints
-
-At every stage boundary, append exactly one line to the progress log the
-task spec names (default `<scratch>/progress-<track>.log`):
-
-    PROGRESS <ISO-8601-UTC> <stage> <one line, no newline inside>
-
-Never rewrite the file. If it is not writable, skip and say so in the
-report. The lead uses this file when the NDJSON stream is missing or
-unparsable.
-
 ---
 
 # Final report format (missing items = incomplete)
+
+Completion verdicts, the DONE marker, and gate output belong in the final
+message only — never rehearse them mid-round. (Measured 2026-08-20: drafted
+"all green" reports and DONE lines appeared in thinking before any work,
+up to 24 repetitions of one plan; none leaked, but the tokens did.)
 
 1. Changed/new file list + one line each
 2. The task spec's completion-criteria commands with **their real output**
