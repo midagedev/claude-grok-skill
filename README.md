@@ -123,7 +123,64 @@ It costs about 120 ms per render because it never calls a quota API on the rende
 
 **The rounds shown are this session's.** The registry is machine-wide on purpose — an orphan has to be findable from wherever you are — but a status line reports on *your* window, and two Claude Code windows open on two repos would otherwise narrate each other's work as if it were yours. So the store stays global and the filter lives at the reading end: each launch records the session that owns it, and each status line asks only for its own. Ownership is matched on both the session id and the Claude Code process, so a round an in-process teammate launched still counts as yours. `runs.sh` unfiltered still shows the whole machine with an `OWNER` column, which is where you look when something is missing; `OUTSOURCE_STATUSLINE_SCOPE=all` puts that view back in the status line.
 
-Set `OUTSOURCE_STATUSLINE_PROVIDERS=""` to drop the quota row entirely, or e.g. `"zai"` to keep one. Needs `jq` and `python3`.
+Set `OUTSOURCE_STATUSLINE_PROVIDERS=""` to drop the quota row entirely, or e.g. `"zai"` to keep one. No runtime dependencies: the tools are one static Go binary.
+
+## Telemetry — local only
+
+Every tool call records one line: which tool, its exit code, how long it took, and
+which flag *names* were passed. Nothing leaves the machine — there is no endpoint,
+no upload and no identifier. `OUTSOURCE_TELEMETRY=0` turns it off.
+
+```
+$ bin/outsource telemetry --since 7d
+TOOL            CALLS   FAIL   RATE      p50      p95
+outsource-run      31      4    13%    11m04s   1h22m
+guard            —(blocks only)
+runs              210      0     0%      4ms      9ms
+
+failures by kind
+    3 x guard          exit 2    a delegate tried a git/gh command it is not allowed
+    2 x outsource-run  exit 72   the round ran and its completion marker never appeared
+    1 x outsource-run  exit 65   a spec that needs eyes was sent to a backend that has none
+```
+
+The point is the second table. Each of those exit codes names a way a *launch* was
+wrong rather than a way the provider failed, so a rate on one is a finding about
+how you are running rounds: 64s mean flags are being guessed, 65s mean vision work
+is going to a blind backend, 72s mean completion markers are not being written into
+specs, and the guard count says which delegates keep trying to do the lead's job.
+
+**What is never recorded:** flag values, paths, spec text, stdin, environment, or
+any credential. Flag *names* are the signal; what they pointed at is not. The only
+values kept are three closed enums this repo defines — harness, provider, git
+profile. The guard records which *kind* of command was blocked, never the command.
+Two tests assert this, one of them by planting a codename in a path, a spec, a
+label and a marker and then failing if any of it appears in the file.
+
+The file lives beside the run registry, is mode 0600, and rolls at 2MB keeping one
+generation.
+
+## Verifying the binary
+
+`bin/outsource` is committed as a prebuilt binary, because neither install path has
+a build step. If you would rather not run bytes you did not build, you do not have
+to: the source is in this repository and the build is reproducible.
+
+```bash
+CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" \
+  -o /tmp/outsource ./cmd/outsource
+shasum -a 256 /tmp/outsource skills/outsource/bin/outsource   # the two must match
+```
+
+Every flag there is load-bearing. `-trimpath` keeps build paths out of the
+artifact; `CGO_ENABLED=0` makes it static and stops the host toolchain from
+mattering; and `-buildvcs=false` stops Go stamping the commit hash and a `+dirty`
+marker into the module version, which would otherwise change the bytes on every
+commit and make this comparison impossible. `tests/reproducible-build.test.sh`
+runs exactly this and fails if the committed binary does not match its source, so
+a source edit that forgot `./build.sh` cannot ship. `./build.sh --all`
+cross-compiles every shipped platform from one machine; Go's linker ad-hoc signs
+darwin/arm64, which is what lets a cross-compiled macOS build execute at all.
 
 ## The three models
 
@@ -288,14 +345,17 @@ $ bin/quota.sh --provider grok
 | `references/spec-preamble-core.md` | The short substitute: the disclosure half, measured to vanish without it |
 | `references/glm-preamble.md` | GLM runtime delta (no images, hooks not flags, evidence rules) |
 | `references/spec-authoring.md` · `references/spec-template.md` | The quality bundle, and the per-task spec skeleton |
-| `bin/outsource-run.sh` | The launcher: provider table, harness picker, isolated config per track, session resume, vision/quota guards, model-identity assertion, completion sentinel |
-| `bin/git-guard.sh` | The git-ban `PreToolUse` hook, one file for both harnesses (29 regression cases) |
-| `bin/credential.sh` · `bin/setup-key.sh` | The single owner of key *and* host resolution (env var → this skill's 0600 store → what z.ai's own installer and `crush` already wrote), and its interactive half |
-| `bin/spec-lint.sh` · `bin/quota.sh` | Pre-launch spec check; plan quota with `--require-window` as a gate |
-| `bin/runs.sh` | The run registry: which rounds are alive, on what, for how long — and which started and never finished |
-| `bin/grok-run.sh` | The grok launcher: same registry entry, sentinel and done-marker verdict as the zai launcher, plus the git-profile flag strings it owns |
-| `bin/last-report.sh` | The round's final report out of either log shape (claude-code JSONL or grok ndjson), exit 65 when there is none |
-| `bin/statusline.sh` | A Claude Code status line: session budgets, plan quotas, live rounds, cached off the render path |
+| `bin/outsource` | **One Go binary is every tool below.** The `bin/*.sh` names beside it are three-line compatibility shims that exec into it — kept because docs, hooks, installed copies and tests all call these tools by path. Invoke `outsource <tool>` directly to save a fork |
+| `outsource-run` | The launcher: provider table, harness picker, isolated config per track, session resume, vision/quota guards, model-identity assertion, completion sentinel |
+| `grok-run` | The grok launcher: same registry entry, sentinel and done-marker verdict, the git-profile flag strings it owns, and a startup proof |
+| `guard` | The git-ban `PreToolUse` hook, one implementation for both harnesses (54 regression cases + a 670-verdict golden) |
+| `credential` · `setup-key.sh` | The single owner of key *and* host resolution, and its interactive half. `setup-key.sh` stays shell on purpose — its whole job is TTY interaction, and `tests/shell-boundary.test.sh` enforces that boundary |
+| `verify-key` | Checks a key before it is stored; the key arrives on stdin, never in argv |
+| `spec-lint` · `quota` | Pre-launch spec check; plan quota with `--require-window` as a gate |
+| `runs` | The run registry: which rounds are alive, on what, for how long — and which started and never finished |
+| `last-report` | The round's final report out of either log shape, exit 65 when there is none |
+| `statusline` | A Claude Code status line: session budgets, plan quotas, live rounds — 7ms per render |
+| `telemetry` | A local record of tool calls, exit codes and reasons, and a summary of them. Local only, never uploaded, `OUTSOURCE_TELEMETRY=0` to disable |
 | `scripts/grok-progress.py` | Compress a grok NDJSON stream into one-line progress events (lead-side; not installed) |
 
 ## The quality bundle

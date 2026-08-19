@@ -123,7 +123,59 @@ z.ai 29%/6d4h │ grok 98%/2h19m │ 🛠2 ▶api zai·crush 12m  ▶tests zai·
 
 **여기 보이는 라운드는 이 세션의 것입니다.** 레지스트리는 일부러 머신 전역입니다 — 고아 라운드는 어디서든 찾을 수 있어야 하니까요 — 하지만 스테이터스라인은 *당신의 창*에 대한 보고이고, 두 레포에 창 두 개를 띄우면 서로의 작업을 자기 것인 양 읊게 됩니다. 그래서 저장소는 전역으로 두고 **필터를 읽는 쪽에** 뒀습니다: 실행마다 소유 세션을 기록하고, 스테이터스라인은 자기 것만 묻습니다. 소유는 세션 id와 Claude Code 프로세스 **양쪽**으로 매칭하므로, 인프로세스 팀메이트가 띄운 라운드도 내 것으로 잡힙니다. 필터 없는 `runs.sh`는 여전히 머신 전체를 `OWNER` 열과 함께 보여 주고(뭔가 안 보일 때 여기를 봅니다), `OUTSOURCE_STATUSLINE_SCOPE=all`이면 그 시야를 스테이터스라인에 되돌립니다.
 
-쿼터 줄 전체를 빼려면 `OUTSOURCE_STATUSLINE_PROVIDERS=""`, 하나만 남기려면 `"zai"`처럼 지정합니다. `jq`와 `python3`이 필요합니다.
+쿼터 줄 전체를 빼려면 `OUTSOURCE_STATUSLINE_PROVIDERS=""`, 하나만 남기려면 `"zai"`처럼 지정합니다. 런타임 의존성은 없습니다 — 도구들은 하나의 정적 Go 바이너리입니다.
+
+## 텔레메트리 — 로컬 전용
+
+도구 호출마다 한 줄이 남습니다: 어떤 도구, 종료 코드, 소요 시간, 그리고 전달된 플래그
+*이름*. 머신을 벗어나는 것은 없습니다 — 엔드포인트도, 업로드도, 식별자도 없습니다.
+`OUTSOURCE_TELEMETRY=0` 으로 끕니다.
+
+```
+$ bin/outsource telemetry --since 7d
+TOOL            CALLS   FAIL   RATE      p50      p95
+outsource-run      31      4    13%    11m04s   1h22m
+runs              210      0     0%      4ms      9ms
+
+failures by kind
+    3 x guard          exit 2    a delegate tried a git/gh command it is not allowed
+    2 x outsource-run  exit 72   the round ran and its completion marker never appeared
+```
+
+요점은 두 번째 표입니다. 그 종료 코드들은 프로바이더가 실패한 방식이 아니라 **발사가
+잘못된 방식**을 이름 부르므로, 비율 하나가 곧 "라운드를 어떻게 돌리고 있나"에 대한
+발견입니다: 64는 플래그를 짐작하고 있다는 뜻, 65는 비전 작업이 눈 없는 백엔드로 가고
+있다는 뜻, 72는 완료 마커를 스펙에 안 넣고 있다는 뜻, 그리고 가드 카운트는 어느 위임자가
+계속 리드의 일을 하려 드는지 말해 줍니다.
+
+**절대 기록하지 않는 것:** 플래그 값, 경로, 스펙 내용, stdin, 환경변수, 자격증명. 플래그
+*이름*이 신호이고 그것이 가리킨 대상은 아닙니다. 값이 남는 것은 이 레포가 정의한 닫힌
+열거형 셋(하네스·프로바이더·git 프로파일)뿐입니다. 가드는 차단된 명령의 *종류*만 남기고
+명령 자체는 남기지 않습니다. 테스트 둘이 이를 단언하며, 하나는 경로·스펙·라벨·마커에
+코드네임을 심어 두고 그것이 파일에 나타나면 실패합니다.
+
+파일은 실행 레지스트리 옆에 있고, 모드 0600이며, 2MB에서 한 세대를 남기고 롤합니다.
+
+## 바이너리 검증
+
+`bin/outsource` 는 프리빌드 바이너리로 커밋됩니다 — 두 설치 경로 어디에도 빌드 단계가
+없기 때문입니다. 직접 빌드하지 않은 바이트를 돌리기 싫다면 그러지 않아도 됩니다: 소스가
+이 레포에 있고 빌드는 재현 가능합니다.
+
+```bash
+CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" \
+  -o /tmp/outsource ./cmd/outsource
+shasum -a 256 /tmp/outsource skills/outsource/bin/outsource   # 두 해시가 같아야 합니다
+```
+
+플래그 셋 다 필수입니다. `-trimpath` 는 빌드 경로를 산출물에서 제거하고,
+`CGO_ENABLED=0` 은 정적으로 만들어 호스트 툴체인이 영향을 주지 않게 하며,
+`-buildvcs=false` 는 Go가 커밋 해시와 `+dirty` 표시를 모듈 버전에 새기는 것을 막습니다 —
+그게 없으면 커밋마다 바이트가 바뀌어 이 비교가 불가능합니다.
+`tests/reproducible-build.test.sh` 가 정확히 이 명령을 돌려 커밋된 바이너리가 소스와
+일치하지 않으면 실패시키므로, `./build.sh` 를 잊은 소스 수정은 배포될 수 없습니다. `./build.sh --all` 이 배포 대상 플랫폼 전부를 한 머신에서
+크로스컴파일하며, darwin/arm64 는 Go 링커가 ad-hoc 서명을 붙여 줍니다 — 그게 크로스컴파일된
+macOS 빌드가 애초에 실행되게 하는 것입니다.
 
 ## 세 모델
 
@@ -288,14 +340,17 @@ $ bin/quota.sh --provider grok
 | `references/spec-preamble-core.md` | 짧은 대체본: 없으면 사라진다고 실측된 공개(disclosure) 부분만 |
 | `references/glm-preamble.md` | GLM 런타임 델타 (이미지 없음, 플래그 아닌 훅, 증거 규칙) |
 | `references/spec-authoring.md` · `references/spec-template.md` | 품질 번들, 그리고 태스크별 스펙 골격 |
-| `bin/outsource-run.sh` | 런처: 프로바이더 테이블, 하네스 선택, 트랙별 격리 config, 세션 재개, 비전·쿼터 가드, 모델 정체성 단언, 완료 센티넬 |
-| `bin/git-guard.sh` | git 금지 `PreToolUse` 훅. 파일 하나가 두 하네스 처리 (회귀 29케이스) |
-| `bin/credential.sh` · `bin/setup-key.sh` | 키 **와 호스트** 해석의 단일 소유자(환경변수 → 이 스킬의 0600 저장소 → z.ai 공식 설치본·`crush`가 이미 써 둔 자리), 그리고 그 대화형 절반 |
-| `bin/spec-lint.sh` · `bin/quota.sh` | 발사 전 스펙 검사; `--require-window`로 게이트화되는 플랜 쿼터 |
-| `bin/runs.sh` | 실행 레지스트리: 어떤 라운드가 무엇 위에서 얼마나 오래 살아 있는지 — 그리고 시작만 하고 끝나지 않은 것 |
-| `bin/grok-run.sh` | grok 런처: zai 런처와 같은 레지스트리 등록·센티넬·done-marker 판정, 그리고 git 프로파일 플래그 문자열의 단일 소유자 |
-| `bin/last-report.sh` | 두 로그 형태(claude-code JSONL, grok ndjson) 어느 쪽에서든 라운드의 최종 보고를 추출, 보고가 없으면 exit 65 |
-| `bin/statusline.sh` | Claude Code 스테이터스라인: 세션 한도, 플랜 쿼터, 진행 중 라운드 — 렌더 경로 밖에서 캐시 |
+| `bin/outsource` | **하나의 Go 바이너리가 아래 도구 전부입니다.** 아래 `bin/*.sh` 이름들은 3줄짜리 호환 shim이고, 각각 이 바이너리로 exec합니다 — 문서·훅·설치본·테스트가 전부 경로로 호출하기 때문에 이름을 유지합니다. `outsource <도구>` 로 직접 부르면 fork 하나를 아낍니다 |
+| `outsource-run` | 런처: 프로바이더 테이블, 하네스 선택, 트랙별 격리 config, 세션 재개, 비전·쿼터 가드, 모델 정체성 단언, 완료 센티넬 |
+| `grok-run` | grok 런처: 같은 레지스트리 등록·센티넬·done-marker 판정, git 프로파일 플래그 문자열의 단일 소유자, 시작 증명 |
+| `guard` | git 금지 `PreToolUse` 훅. 두 하네스 공용 (54 회귀 케이스 + 670건 판정 골든) |
+| `credential` · `setup-key.sh` | 키 **와 호스트** 해석의 단일 소유자, 그리고 그 대화형 절반. `setup-key.sh` 는 의도적으로 셸로 남았습니다(TTY 상호작용 전용, `tests/shell-boundary.test.sh` 가 경계를 강제) |
+| `verify-key` | 저장 전 키 검증. 키는 argv가 아니라 stdin으로 받습니다 |
+| `spec-lint` · `quota` | 발사 전 스펙 검사; `--require-window` 로 게이트화되는 플랜 쿼터 |
+| `runs` | 실행 레지스트리: 어떤 라운드가 무엇 위에서 얼마나 오래 살아 있는지 — 그리고 시작만 하고 끝나지 않은 것 |
+| `last-report` | 두 로그 형태 어느 쪽에서든 라운드의 최종 보고 추출, 없으면 exit 65 |
+| `statusline` | Claude Code 스테이터스라인: 세션 한도, 플랜 쿼터, 진행 중 라운드 — 렌더 7ms |
+| `telemetry` | 도구 호출·종료코드·이유의 로컬 기록과 요약. 로컬 전용, 업로드 없음, `OUTSOURCE_TELEMETRY=0` 로 끔 |
 | `scripts/grok-progress.py` | grok NDJSON 스트림을 한 줄짜리 진행 이벤트로 압축 (리드 쪽 도구; 설치본에는 미포함) |
 
 ## 품질 번들

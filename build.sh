@@ -25,6 +25,16 @@ cd "$(dirname "$0")"
 # across libc versions. -trimpath keeps build paths out of the artifact so the
 # same source produces the same bytes on any machine.
 LDFLAGS='-s -w'
+# -buildvcs=false is not a detail. Go otherwise stamps the module version from
+# git — commit hash, commit timestamp, and "+dirty" when the tree is not clean —
+# so the binary's bytes change on every commit even when no source changed. Two
+# consequences, both bad for a repo that COMMITS the artifact: the README's
+# verification recipe could never match (you would have to be at the same commit
+# with an identical tree state), and every commit would carry a fresh multi-MB
+# blob into history for no reason. With VCS stamping off the binary is a pure
+# function of the source, which is what makes "rebuild it and compare hashes"
+# a real offer.
+BUILDFLAGS='-trimpath -buildvcs=false'
 BIN=outsource
 
 # Every compatibility name, and the tool it dispatches to. Add a line when a
@@ -67,13 +77,13 @@ if [ "${1:-}" = "--all" ]; then
     os="${target%/*}"; arch="${target#*/}"
     out="dist/$os-$arch"; mkdir -p "$out"
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-      go build -trimpath -ldflags="$LDFLAGS" -o "$out/$BIN" ./cmd/outsource
+      go build $BUILDFLAGS -ldflags="$LDFLAGS" -o "$out/$BIN" ./cmd/outsource
     write_shims "$out"
     printf '%-14s %s\n' "$target" "$(du -h "$out/$BIN" | cut -f1)"
   done
   exit 0
 fi
 
-CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o "skills/outsource/bin/$BIN" ./cmd/outsource
+CGO_ENABLED=0 go build $BUILDFLAGS -ldflags="$LDFLAGS" -o "skills/outsource/bin/$BIN" ./cmd/outsource
 write_shims skills/outsource/bin
 echo "built skills/outsource/bin/$BIN ($(du -h "skills/outsource/bin/$BIN" | cut -f1)) + ${#SHIMS[@]} shim(s)"
