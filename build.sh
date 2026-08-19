@@ -34,6 +34,7 @@ BIN=outsource
 SHIMS=(
   "git-guard.sh:guard"
   "last-report.sh:last-report"
+  "quota.sh:quota"
   "runs.sh:runs"
   "spec-lint.sh:spec-lint"
   "statusline.sh:statusline"
