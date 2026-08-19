@@ -150,14 +150,48 @@ func TestRollKeepsOneGeneration(t *testing.T) {
 	}
 }
 
-func TestMeaningFallsBackFromToolToCode(t *testing.T) {
-	if m := meaning("guard", 2); !strings.Contains(m, "not allowed") {
-		t.Errorf("tool-specific meaning missing: %q", m)
+// A borrowed label is worse than no label. The first version of the report had a
+// fallback for every code, so `runs` exit 65 — "no such run id" — was printed as
+// "a spec that needs eyes was sent to a backend that has none", and 66 became a
+// quota refusal. The summary is read to decide what to fix; a summary that
+// misnames a failure sends the reader after the wrong thing.
+func TestMeaningNeverBorrowsALabelAcrossTools(t *testing.T) {
+	// The same small integer means different facts in different tools, and each
+	// must say its own.
+	cases := []struct {
+		tool string
+		rc   int
+		want string
+	}{
+		{"runs", 65, "no such run id"},
+		{"runs", 66, "still running"},
+		{"last-report", 65, "died mid-run"},
+		{"last-report", 66, "could not be read"},
+		{"outsource-run", 65, "needs eyes"},
+		{"outsource-run", 66, "plan could not finish"},
+		{"grok-run", 66, "no such --cwd"},
+		{"quota", 3, "--require-window floor"},
+		{"guard", 2, "not allowed"},
 	}
-	if m := meaning("outsource-run", 70); !strings.Contains(m, "model") {
-		t.Errorf("shared code meaning missing: %q", m)
+	for _, c := range cases {
+		got := meaning(c.tool, c.rc)
+		if !strings.Contains(got, c.want) {
+			t.Errorf("meaning(%s, %d) = %q, want it to mention %q", c.tool, c.rc, got, c.want)
+		}
 	}
-	if m := meaning("runs", 999); m != "" {
-		t.Errorf("an unknown code must not invent a meaning: %q", m)
+	// 64 is the one genuinely universal code, so it may fall back.
+	if m := meaning("some-future-tool", 64); !strings.Contains(m, "usage") {
+		t.Errorf("64 should fall back to usage, got %q", m)
+	}
+	// Anything else with no entry says nothing rather than borrowing.
+	for _, c := range []struct {
+		tool string
+		rc   int
+	}{
+		{"runs", 70}, {"spec-lint", 65}, {"credential", 72}, {"some-future-tool", 65},
+	} {
+		if m := meaning(c.tool, c.rc); m != "" {
+			t.Errorf("meaning(%s, %d) borrowed a label: %q", c.tool, c.rc, m)
+		}
 	}
 }

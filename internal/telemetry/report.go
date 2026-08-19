@@ -18,29 +18,68 @@ import (
 //
 // Keyed by tool where a code means different things (2 is a guard block, but
 // nothing special elsewhere), and by code alone where the vocabulary is shared.
+// meanings turns an exit code back into the finding it represents. Without this
+// the log is a column of numbers; with it, a count is a sentence about how rounds
+// are being launched.
+//
+// Keyed by tool, ALMOST always. The first version had a `*/65`-style fallback for
+// every code and it produced a report that lied: `runs` exit 65 is "no such run
+// id", but the fallback labelled it "a spec that needs eyes was sent to a backend
+// that has none", and 66 became a quota refusal. Different tools legitimately
+// reuse small integers for different facts, so a shared label is only correct
+// where the fact really is shared.
+//
+// 64 is the one genuinely universal code here — every tool means "usage" by it —
+// so it keeps a fallback. Everything else must be spelled out per tool, and a
+// pair with no entry prints no meaning at all rather than a borrowed one.
 var meanings = map[string]string{
-	"guard/2":        "a delegate tried a git/gh command it is not allowed",
-	"*/1":            "no usable credential, or an unclassified failure",
-	"*/64":           "the caller passed a flag or a contract the tool refused (usage)",
-	"*/65":           "a spec that needs eyes was sent to a backend that has none",
-	"*/66":           "refused: the plan could not finish the round, or a path was wrong",
-	"*/69":           "the harness CLI is not on PATH",
-	"*/70":           "the model that answered was not the one requested, or unverifiable",
-	"*/71":           "a launcher exited without writing a sentinel (a bug in the launcher)",
-	"*/72":           "the round ran and its completion marker never appeared",
-	"*/124":          "a round was killed by its own --max-seconds ceiling",
-	"spec-lint/1":    "a spec carried a wrong premise (findings)",
-	"verify-key/1":   "the provider rejected the key",
-	"verify-key/2":   "the provider could not be reached to check the key",
+	"*/64": "the caller passed a flag or a contract the tool refused (usage)",
+
+	"guard/2": "a delegate tried a git/gh command it is not allowed",
+
+	"outsource-run/1":   "no usable credential for the provider",
+	"outsource-run/65":  "a spec that needs eyes was sent to a backend that has none",
+	"outsource-run/66":  "refused before launching: the plan could not finish the round",
+	"outsource-run/69":  "the harness CLI is not on PATH",
+	"outsource-run/70":  "the model that answered was not the one requested, or unverifiable",
+	"outsource-run/72":  "the round ran and its completion marker never appeared",
+	"outsource-run/124": "the round was killed by its own --max-seconds ceiling",
+
+	"grok-run/66": "no such --cwd, or an unreadable --spec",
+	"grok-run/69": "the grok CLI is not on PATH, or it produced no output at all",
+	"grok-run/71": "the launcher exited without writing a sentinel (a bug in the launcher)",
+	"grok-run/72": "the round ran and its completion marker never appeared",
+
+	"runs/65": "no such run id",
+	"runs/66": "refused: that round is still running, so it is work and not residue",
+
 	"last-report/65": "a log held no report — the round died mid-run",
+	"last-report/66": "the log file could not be read",
+
+	"spec-lint/1": "a spec carried a wrong premise (findings)",
+	"spec-lint/2": "the linter could not run: a bad --root, or an unreadable spec",
+
+	"quota/1": "no usable credential for the provider",
+	"quota/2": "the provider's endpoint failed, or answered something unreadable",
+	"quota/3": "the plan is below the --require-window floor",
+
+	"credential/1": "no key found for the provider, anywhere in the chain",
+
+	"verify-key/1": "the provider rejected the key",
+	"verify-key/2": "the provider could not be reached to check the key",
+	"verify-key/3": "that provider has no free endpoint to verify against",
+
+	"statusline/1": "the status line could not render",
+	"telemetry/66": "the telemetry log could not be read",
 }
 
 func meaning(tool string, rc int) string {
 	if m, ok := meanings[fmt.Sprintf("%s/%d", tool, rc)]; ok {
 		return m
 	}
-	if m, ok := meanings[fmt.Sprintf("*/%d", rc)]; ok {
-		return m
+	// Only 64 falls back. See the table's note: a borrowed label is worse than none.
+	if rc == 64 {
+		return meanings["*/64"]
 	}
 	return ""
 }
@@ -240,17 +279,24 @@ func writeSummary(w io.Writer, events []Event) {
 		}
 	}
 
+	// Merged across tools, not per tool. Two launchers name the same reason — "the
+	// completion marker never appeared" — and the first version printed it twice
+	// with the counts split, which is the opposite of what a summary is for.
+	merged := map[string]int{}
+	for _, s := range byTool {
+		for why, n := range s.notes {
+			merged[why] += n
+		}
+	}
 	var reasons []struct {
 		why string
 		n   int
 	}
-	for _, s := range byTool {
-		for why, n := range s.notes {
-			reasons = append(reasons, struct {
-				why string
-				n   int
-			}{why, n})
-		}
+	for why, n := range merged {
+		reasons = append(reasons, struct {
+			why string
+			n   int
+		}{why, n})
 	}
 	if len(reasons) > 0 {
 		sort.Slice(reasons, func(i, j int) bool { return reasons[i].n > reasons[j].n })
