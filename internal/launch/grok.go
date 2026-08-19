@@ -53,7 +53,7 @@ const researchNotice = "> [runner notice — research mode] 이 라운드에는 
 type grokOpts struct {
 	cwd, spec, log, label, marker, profile, resume string
 	model, effort, maxTurns                        string
-	research                                       bool
+	research, detach                               bool
 	extra                                          []string
 }
 
@@ -61,9 +61,11 @@ type grokOpts struct {
 // the zai launcher: a registry entry while it runs, a <log>.rc sentinel when it
 // exits, and a done-marker verdict inside that sentinel.
 //
-// Foreground by design: run the whole invocation under nohup/& yourself, exactly
-// one background layer. Foreground is what makes the wrapper the caller's to
-// kill, which is why signals are held rather than obeyed.
+// Foreground by default: the wrapper is the caller's to kill, which is why
+// signals are held rather than obeyed. Pass --detach to have the launcher own
+// its single background layer (a re-exec in its own session) instead of
+// hand-assembling one with nohup/& — the foreground form dies with the
+// caller's process group, e.g. an orchestrator's command timeout.
 func GrokMain(args []string, stdout, stderr io.Writer) int {
 	o := grokOpts{profile: "strict", model: "grok-4.6", effort: "xhigh", maxTurns: "1200"}
 	for i := 0; i < len(args); i++ {
@@ -99,6 +101,8 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 			o.maxTurns, ok = need()
 		case "--research":
 			o.research, ok = true, true
+		case "--detach":
+			o.detach, ok = true, true
 		case "--":
 			o.extra = append(o.extra, args[i+1:]...)
 			i = len(args)
@@ -165,6 +169,41 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "grok-run: unknown --git-profile: %s (strict|readonly-plus|trusted)\n", o.profile)
 		return ExitUsage
 	}
+
+	// --detach: re-exec this same launch in its own session and return. This
+	// point — after every usage check, before anything stateful (session id,
+	// registry, log files) — is the only safe seam: usage errors stay
+	// synchronous on the caller's terminal, while everything the round owns is
+	// created by exactly one process. The child is what "one background layer"
+	// meant all along; the flag exists because callers kept hand-assembling
+	// that layer with nohup and losing rounds to their orchestrator's command
+	// timeout delivering TERM to the foreground process group (measured
+	// 2026-08-19: rc=143, wrapper_signal=TERM, ten minutes of work gone).
+	if o.detach {
+		self, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(stderr, "grok-run: cannot re-exec for --detach: %v\n", err)
+			return ExitUsage
+		}
+		child := []string{"grok-run"}
+		for _, a := range args {
+			if a != "--detach" {
+				child = append(child, a)
+			}
+		}
+		cmd := exec.Command(self, child...)
+		cmd.SysProcAttr = detachAttr()
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(stderr, "grok-run: could not detach: %v\n", err)
+			return ExitNoStart
+		}
+		fmt.Fprintf(stdout, "grok-run: detached (pid=%d, label=%s, log=%s) — completion evidence is %s.rc, watch with: outsource runs\n",
+			cmd.Process.Pid, o.label, o.log, o.log)
+		_ = cmd.Process.Release()
+		return 0
+	}
+
 	promptFile := o.spec
 	if o.research {
 		gitFlags = append(gitFlags, "--deny", "Write", "--deny", "Edit",

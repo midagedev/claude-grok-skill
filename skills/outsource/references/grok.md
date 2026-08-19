@@ -29,11 +29,18 @@ appeared in the status line — two watchers waited on files that would never
 exist):
 
 ```bash
-nohup bash <skill-dir>/bin/grok-run.sh \
+bash <skill-dir>/bin/grok-run.sh --detach \
   --cwd <dir> --spec <scratch>/spec.md --log <scratch>/grok-<track>.ndjson \
   --label <track> --done-marker DONE-<TRACK> \
-  [--git-profile strict|readonly-plus|trusted] > <scratch>/launch.out 2>&1 &
+  [--git-profile strict|readonly-plus|trusted]
 ```
+
+`--detach` makes the launcher own its single background layer: usage errors
+(bad path, marker not in spec) still fail synchronously on your terminal,
+then the round re-execs into its own session and survives you. Do not wrap
+it in `nohup … &` yourself — the foreground form dies with your process
+group (measured 2026-08-19: an orchestrator's 2-minute command timeout
+TERM-ed a lane ten minutes into its work; rc=143, wrapper_signal=TERM).
 
 It registers the round in `runs.sh` (the status line sees it), verifies grok
 actually started (ndjson must grow within 30s, else exit 69 out loud), writes
