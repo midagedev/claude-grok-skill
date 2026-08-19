@@ -34,6 +34,7 @@ BIN=outsource
 SHIMS=(
   "credential.sh:credential"
   "git-guard.sh:guard"
+  "grok-run.sh:grok-run"
   "last-report.sh:last-report"
   "quota.sh:quota"
   "runs.sh:runs"

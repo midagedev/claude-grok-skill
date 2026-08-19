@@ -22,6 +22,7 @@ import (
 
 	"github.com/midagedev/outsource/internal/cred"
 	"github.com/midagedev/outsource/internal/guard"
+	"github.com/midagedev/outsource/internal/launch"
 	"github.com/midagedev/outsource/internal/quota"
 	"github.com/midagedev/outsource/internal/report"
 	"github.com/midagedev/outsource/internal/runs"
@@ -47,6 +48,7 @@ var tools = []tool{
 	{"credential", noStdin(cred.Main)},
 	{"verify-key", func(a []string, in io.Reader, out, err io.Writer) int { return cred.VerifyMain(a, out, err, in) }},
 	{"guard", guard.Main},
+	{"grok-run", noStdin(launch.GrokMain)},
 	{"last-report", noStdin(report.Main)},
 	{"quota", noStdin(quota.Main)},
 	{"runs", noStdin(runs.Main)},
