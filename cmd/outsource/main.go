@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/midagedev/outsource/internal/report"
 	"github.com/midagedev/outsource/internal/runs"
 	"github.com/midagedev/outsource/internal/statusline"
 )
@@ -39,6 +40,7 @@ func noStdin(f func(args []string, stdout, stderr io.Writer) int) func([]string,
 }
 
 var tools = []tool{
+	{"last-report", noStdin(report.Main)},
 	{"runs", noStdin(runs.Main)},
 	{"statusline", statusline.Main},
 }

@@ -1,0 +1,188 @@
+// Package report extracts a delegated round's final report from its log,
+// whatever the backend wrote it.
+//
+// The field problem this solves (2026-08-17, four rounds in one night): every
+// finished round made the lead hand-write the same throwaway JSON extractor,
+// twice over because the backends differ.
+//
+//	claude-code harness (run.log, JSONL): the last {"type":"result"} event's
+//	  "result" field; older logs may only have long assistant text blocks.
+//	grok CLI (streaming-json ndjson): there is no result event at all — the
+//	  report is the concatenation of {"type":"text"} deltas after the LAST
+//	  tool_call/tool_call_update event.
+//
+// The shape is detected per line, so a log that mixes both — or a future
+// harness that adopts either — still yields the report.
+//
+// This prints the delegate's words verbatim. It does NOT prove completion: the
+// <log>.rc sentinel is the completion evidence, and a report without a sentinel
+// is a round that has not finished.
+package report
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+)
+
+const (
+	ExitUsage      = 64
+	ExitNoReport   = 65
+	ExitUnreadable = 66
+)
+
+// minLongText is how much assistant text has to be there before it is treated
+// as a report. It is a guess by construction — the fallback exists only for
+// logs with no result event — so the bar is set where a real report sits and a
+// one-line acknowledgement does not.
+const minLongText = 200
+
+// Extract returns the report found in a log stream.
+func Extract(r io.Reader) (string, bool) {
+	var (
+		result       string
+		haveResult   bool
+		lastLongText string
+		grokParts    []string
+		sawGrokTool  bool
+	)
+	sc := bufio.NewScanner(r)
+	// A single result field can hold an entire report, far past the default
+	// 64KB line limit; the shell read whole lines with no such cap.
+	sc.Buffer(make([]byte, 0, 256*1024), 32*1024*1024)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		var obj map[string]json.RawMessage
+		if json.Unmarshal([]byte(line), &obj) != nil {
+			continue // non-JSON and truncated lines are skipped, never fatal
+		}
+		var typ string
+		if raw, ok := obj["type"]; ok {
+			_ = json.Unmarshal(raw, &typ)
+		}
+		switch typ {
+		case "result":
+			var s string
+			if raw, ok := obj["result"]; ok && json.Unmarshal(raw, &s) == nil && s != "" {
+				result, haveResult = s, true
+			}
+		case "assistant":
+			var msg struct {
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			}
+			if raw, ok := obj["message"]; ok && json.Unmarshal(raw, &msg) == nil {
+				for _, c := range msg.Content {
+					if c.Type == "text" && len(c.Text) >= minLongText {
+						lastLongText = c.Text
+					}
+				}
+			}
+		case "tool_call", "tool_call_update":
+			// A tool ran, so anything collected before it was not the final
+			// report: reset. This is what keeps a marker quoted during planning
+			// from being mistaken for the delegate's conclusion.
+			sawGrokTool = true
+			grokParts = nil
+		case "text":
+			if raw, ok := obj["data"]; ok {
+				var s string
+				if json.Unmarshal(raw, &s) == nil {
+					grokParts = append(grokParts, s)
+					break
+				}
+				var d struct {
+					Text *string `json:"text"`
+				}
+				if json.Unmarshal(raw, &d) == nil && d.Text != nil {
+					grokParts = append(grokParts, *d.Text)
+				}
+			}
+		}
+	}
+
+	// Preference order mirrors trustworthiness: an explicit result event is the
+	// harness saying "this is the answer"; grok's trailing text is the answer by
+	// construction, since nothing runs after it; a long assistant text is a
+	// guess. The two grok arms are kept separate — one for a log whose shape a
+	// tool event confirmed, one for a final turn that called no tools at all —
+	// because collapsing them would accept trailing text from any log shape.
+	var out string
+	switch {
+	case haveResult:
+		out = result
+	case sawGrokTool && len(grokParts) > 0:
+		out = strings.Join(grokParts, "")
+	case !sawGrokTool && len(grokParts) > 0:
+		out = strings.Join(grokParts, "")
+	default:
+		out = lastLongText
+	}
+	if strings.TrimSpace(out) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(out), true
+}
+
+// Main is the last-report entry point.
+func Main(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] == "" {
+		fmt.Fprintln(stderr, "usage: last-report <log-file> [--max-chars N]")
+		return ExitUsage
+	}
+	path := args[0]
+	args = args[1:]
+	maxChars := 0
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--max-chars":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, "last-report: --max-chars needs a value")
+				return ExitUsage
+			}
+			n, err := strconv.Atoi(args[i+1])
+			if err != nil || n < 0 {
+				fmt.Fprintf(stderr, "last-report: --max-chars wants a whole number, got: %s\n", args[i+1])
+				return ExitUsage
+			}
+			maxChars = n
+			i++
+		default:
+			fmt.Fprintf(stderr, "last-report: unknown flag: %s\n", args[i])
+			return ExitUsage
+		}
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "last-report: unreadable: %s\n", path)
+		return ExitUnreadable
+	}
+	defer f.Close()
+
+	rep, ok := Extract(f)
+	if !ok {
+		// Exit 65 rather than printing nothing, so a died-mid-run round is a
+		// branch a caller can take and not a silence it has to interpret.
+		fmt.Fprintf(stderr, "last-report: no report-shaped content in %s\n", path)
+		return ExitNoReport
+	}
+	// Truncation counts runes, not bytes: cutting a report mid-character would
+	// put mojibake in front of a lead reading a delegate's own words.
+	if maxChars > 0 {
+		if r := []rune(rep); len(r) > maxChars {
+			rep = string(r[:maxChars]) + fmt.Sprintf("\n… [truncated at %d chars]", maxChars)
+		}
+	}
+	fmt.Fprintln(stdout, rep)
+	return 0
+}
