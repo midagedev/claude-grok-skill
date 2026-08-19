@@ -36,6 +36,7 @@ SHIMS=(
   "git-guard.sh:guard"
   "grok-run.sh:grok-run"
   "last-report.sh:last-report"
+  "outsource-run.sh:outsource-run"
   "quota.sh:quota"
   "runs.sh:runs"
   "spec-lint.sh:spec-lint"

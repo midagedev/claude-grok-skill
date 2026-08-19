@@ -324,3 +324,43 @@ func setupKeyPath() string {
 	}
 	return filepath.Join(filepath.Dir(exe), "setup-key.sh")
 }
+
+// ---- in-process API for the launchers --------------------------------------
+// These exist so a launcher in the same binary does not spawn a subprocess to
+// ask a question this package can already answer. Credential resolution keeps
+// its single owner either way; only the transport changes.
+
+// KeyOrExplain resolves a provider's key, or prints the same "tried, in order"
+// explanation the CLI prints and reports false. The message stays owned here,
+// because a caller writing its own would drift from the resolution order.
+func KeyOrExplain(provider string, stderr io.Writer) (string, bool) {
+	p, ok := providers[provider]
+	if !ok {
+		fmt.Fprintf(stderr, "credential: unknown provider '%s' (known: zai xai)\n", provider)
+		return "", false
+	}
+	pp := resolvePaths()
+	var tried []string
+	for _, s := range sources(p) {
+		tried = append(tried, s.note)
+		if v := s.read(pp); v != "" {
+			return v, true
+		}
+	}
+	fmt.Fprintf(stderr, "outsource: no API key for provider '%s'. Tried, in order:\n", provider)
+	for _, t := range tried {
+		fmt.Fprintf(stderr, "  - %s\n", t)
+	}
+	fmt.Fprintf(stderr, "\nSet it once, interactively:\n\n  %s %s\n\nor export it yourself:\n\n  export %s=...\n",
+		setupKeyPath(), provider, p.EnvVar)
+	return "", false
+}
+
+// Base answers which host this account lives on, given the provider's default.
+func Base(provider, def string) string {
+	p, ok := providers[provider]
+	if !ok {
+		return def
+	}
+	return BaseURL(p, def, resolvePaths())
+}
