@@ -251,10 +251,39 @@ the lead writes into the spec and then reads back as a failure: measured
 exited 72 `done_marker=absent`. Nothing was wrong with the round.
 
 For a schema round, completion evidence is the sentinel's `rc=0` plus
-**stdout parsing as valid JSON against the schema** — that is a stronger
-proof than a marker string, because a truncated or abandoned round cannot
-produce a schema-valid object. Only add a marker field *inside* the schema if
-you want one, and never as the launcher's `--done-marker`.
+**stdout parsing as valid JSON against the schema**. Only add a marker field
+*inside* the schema if you want one, and never as the launcher's
+`--done-marker`.
+
+**But schema validity is not proof that the work happened.** Measured
+2026-08-19: a `--json-schema` round made **zero tool calls** (ndjson event
+census: 534 `text`, 35 `thought`, 1 `end` — no tool events, 39.5k input
+tokens = the spec alone) and returned a fully schema-valid object whose
+string fields were `"placeholder"` and whose ranked list was `["a","b","c"]`.
+`rc=0`, schema-valid, and worthless. The constraint appears to suppress tool
+use: the model answers the schema directly instead of working first.
+
+So **do not use `--json-schema` for any round whose value comes from tool
+calls** — reading files, opening images, running probes. Use it only for
+rounds that are pure judgement over material already inlined in the spec.
+For everything else use `--done-marker` and ask for a fenced ```json block in
+the report, then parse and validate that block yourself.
+
+Whatever the shape, add a work-happened check to the completion criteria:
+
+```bash
+python3 - <<'EOF'
+import json, collections
+c = collections.Counter()
+for line in open('<log>.ndjson'):
+    try: c[json.loads(line).get('type', '?')] += 1
+    except Exception: pass
+print(c.most_common())   # no tool_use / tool_result events => the round did not work
+EOF
+```
+
+and reject placeholder values (`placeholder`, `TBD`, `a`/`b`/`c`, `<...>`)
+outright rather than reading past them.
 
 ### Vision verdict (one-shot judge)
 
@@ -263,10 +292,15 @@ transcript; only the judge's **text verdict** comes back. Recipe:
 
 - Fresh SID per verdict; the judge **retires after one verdict** (image
   turns make these the heaviest sessions). A FIX round gets a *new* judge.
-- Flags: `--git-profile readonly-plus --research`, plus `-- --json-schema
-  '<schema>'` for a parseable SHIP/FIX verdict with per-axis fields.
-  **Do not pass `--done-marker` on a schema round** — see "Structured
-  results" above; the two flags cannot both be satisfied.
+- Flags: `--git-profile readonly-plus --research`, plus `--done-marker`.
+  **Do not use `--json-schema` on a vision round** — measured 2026-08-19 it
+  suppressed tool use entirely and the judge returned a schema-valid
+  placeholder object without opening a single PNG (see "Structured results").
+  Ask for a fenced ```json block instead and validate it yourself.
+- **Name the frames the judge must open, and require a per-frame observation
+  line before the verdict.** A judge that has to write "frame-009 — what is
+  visible" for twelve named files cannot skip the images. Then confirm the
+  ndjson has tool events.
 - The briefing has three mandatory elements (each earned by a round of
   decisive verdicts): ① **numeric context first** — the measured table, so
   the judge spends itself on perception, not re-measurement; ② a **narrowed
