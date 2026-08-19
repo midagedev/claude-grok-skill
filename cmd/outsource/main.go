@@ -21,16 +21,26 @@ import (
 	"strings"
 
 	"github.com/midagedev/outsource/internal/runs"
+	"github.com/midagedev/outsource/internal/statusline"
 )
 
 // tool is one dispatchable command.
 type tool struct {
 	name string
-	main func(args []string, stdout, stderr io.Writer) int
+	main func(args []string, stdin io.Reader, stdout, stderr io.Writer) int
+}
+
+// Tools that ignore stdin are adapted here rather than each growing a
+// parameter it does not use.
+func noStdin(f func(args []string, stdout, stderr io.Writer) int) func([]string, io.Reader, io.Writer, io.Writer) int {
+	return func(args []string, _ io.Reader, stdout, stderr io.Writer) int {
+		return f(args, stdout, stderr)
+	}
 }
 
 var tools = []tool{
-	{"runs", runs.Main},
+	{"runs", noStdin(runs.Main)},
+	{"statusline", statusline.Main},
 }
 
 // toolFor resolves a name to a tool. The `.sh` suffix is accepted because the
@@ -57,12 +67,12 @@ func main() {
 	// argv[0] first: invoked through one of its tool names, every argument
 	// belongs to that tool.
 	if t := toolFor(os.Args[0]); t != nil {
-		os.Exit(t.main(os.Args[1:], os.Stdout, os.Stderr))
+		os.Exit(t.main(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	// Otherwise the first argument selects the tool: `outsource runs list`.
 	if len(os.Args) > 1 {
 		if t := toolFor(os.Args[1]); t != nil {
-			os.Exit(t.main(os.Args[2:], os.Stdout, os.Stderr))
+			os.Exit(t.main(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 		}
 		fmt.Fprintf(os.Stderr, "outsource: unknown tool: %s (have: %s)\n", os.Args[1], names())
 		os.Exit(runs.ExitUsage)

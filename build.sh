@@ -33,6 +33,7 @@ BIN=outsource
 # exists to remove.
 SHIMS=(
   "runs.sh:runs"
+  "statusline.sh:statusline"
 )
 
 write_shims() {  # <dir>
