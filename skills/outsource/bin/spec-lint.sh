@@ -149,16 +149,22 @@ CREATE_WORDS = (
     r"create|creates?d?|new files?|files? to create|to create|add files?"
     r"|신규(?:\s*파일)?|새\s*파일|생성할?\s*파일|만들\s*파일|추가할?\s*파일"
 )
+# A creation marker can open any kind of list item. Bullets were accepted and
+# numbers were not, so `1. Create: <path>` reported the file as missing while
+# `- Create: <path>` two lines away was exempt — a distinction no spec author
+# would predict, and one that puts the finding on a Deliverables section, where
+# to-be-created paths are densest. Same bullet alternation as LIST_ITEM below.
+BULLET = r"(?:[-*+]|\d+[.)])"
 CREATE_OPEN = re.compile(
-    r"^\s*(?:[-*+]\s+)?(?:#+\s*)?(?:\*\*)?"
+    r"^\s*(?:" + BULLET + r"\s+)?(?:#+\s*)?(?:\*\*)?"
     r"(?:" + CREATE_WORDS + r")"
     r"(?:\*\*)?\s*(?:\([^)]*\))?\s*:\s*$", re.I)
 CREATE_INLINE = re.compile(
-    r"^\s*(?:[-*+]\s+)?(?:#+\s*)?(?:\*\*)?"
+    r"^\s*(?:" + BULLET + r"\s+)?(?:#+\s*)?(?:\*\*)?"
     r"(?:" + CREATE_WORDS + r")"
     r"(?:\*\*)?\s*:\s+\S", re.I)
 # Inside a creation block: a list item, or a wrapped continuation of one.
-LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
+LIST_ITEM = re.compile(r"^\s*" + BULLET + r"\s+\S")
 CONTINUATION = re.compile(r"^\s{2,}\S")
 
 

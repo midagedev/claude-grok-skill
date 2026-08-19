@@ -84,6 +84,18 @@ EOF
 ok "New files: opens a block too" 0 "1 to-be-created exempt" "missing"
 
 run <<'EOF'
+1. Create: `pkg/brandnew.go` — the program.
+2. Create: `pkg/brandnew_test.go` — its test.
+EOF
+ok "a numbered list item opens the inline form" 0 "2 to-be-created exempt" "missing"
+
+run <<'EOF'
+1. New files:
+   - `pkg/brandnew.go`
+EOF
+ok "a numbered list item opens a block too" 0 "1 to-be-created exempt" "missing"
+
+run <<'EOF'
 Create (vitest files, beside their modules):
 - `pkg/brandnew.go`
 EOF
