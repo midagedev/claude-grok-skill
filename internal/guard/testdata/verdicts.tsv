@@ -1,0 +1,679 @@
+# Verdicts of the SHELL git-guard.sh, frozen at the commit that replaced
+# it with the Go port. blocked<TAB>command, tabs and newlines escaped.
+#
+# This is the boundary, not a convenience: once the shell implementation
+# is deleted its behaviour is unrecoverable, and a security guard whose
+# only spec is its own source can drift in either direction — a hole or a
+# false refusal — with nothing to notice. Regenerating this file is not a
+# way to make a failing test pass. A row that legitimately changes gets
+# edited by hand, in a commit that says why.
+block	git commit
+block	git commit -am probe
+block	git push
+block	git push -am probe
+block	git checkout
+block	git checkout -am probe
+block	git switch
+block	git switch -am probe
+block	git stash
+block	git stash -am probe
+block	git restore
+block	git restore -am probe
+block	git add
+block	git add -am probe
+block	git rm
+block	git rm -am probe
+block	git mv
+block	git mv -am probe
+block	git reset
+block	git reset -am probe
+block	git rebase
+block	git rebase -am probe
+block	git merge
+block	git merge -am probe
+block	git cherry-pick
+block	git cherry-pick -am probe
+block	git revert
+block	git revert -am probe
+block	git tag
+block	git tag -am probe
+block	git branch
+allow	git branch -am probe
+block	git worktree
+block	git worktree -am probe
+block	git clean
+block	git clean -am probe
+block	git filter-branch
+block	git filter-branch -am probe
+block	git update-ref
+block	git update-ref -am probe
+block	git apply
+block	git apply -am probe
+block	git am
+block	git am -am probe
+block	git fetch
+block	git fetch -am probe
+block	git pull
+block	git pull -am probe
+block	git clone
+block	git clone -am probe
+block	git remote
+block	git remote -am probe
+block	git submodule
+block	git submodule -am probe
+block	git config
+block	git config -am probe
+block	git gc
+block	git gc -am probe
+block	git prune
+block	git prune -am probe
+block	git reflog
+block	git reflog -am probe
+block	git notes
+block	git notes -am probe
+block	git replace
+block	git replace -am probe
+block	git sparse-checkout
+block	git sparse-checkout -am probe
+block	git bisect
+block	git bisect -am probe
+allow	git log
+allow	git log --oneline -5
+allow	git show
+allow	git show --oneline -5
+allow	git diff
+allow	git diff --oneline -5
+allow	git blame
+allow	git blame --oneline -5
+allow	git status
+allow	git status --oneline -5
+allow	git ls-files
+allow	git ls-files --oneline -5
+allow	git rev-parse
+allow	git rev-parse --oneline -5
+allow	git describe
+allow	git describe --oneline -5
+allow	git shortlog
+allow	git shortlog --oneline -5
+allow	git grep
+allow	git grep --oneline -5
+allow	git cat-file
+allow	git cat-file --oneline -5
+allow	git worktree list
+allow	git branch -a
+allow	git branch -l
+allow	git branch -v
+allow	git branch -r
+allow	git branch --list
+allow	git remote -v
+allow	git remote --verbose
+allow	git remote show
+allow	git config --get user.name
+allow	git config --get-all user.name
+allow	git config --list
+allow	git config -l
+allow	git -C /tmp worktree list
+allow	git -C /tmp branch -a
+allow	git -C /tmp branch -l
+allow	git -C /tmp branch -v
+allow	git -C /tmp branch -r
+allow	git -C /tmp branch --list
+allow	git -C /tmp remote -v
+allow	git -C /tmp remote --verbose
+allow	git -C /tmp remote show
+allow	git -C /tmp config --get user.name
+allow	git -C /tmp config --get-all user.name
+allow	git -C /tmp config --list
+allow	git -C /tmp config -l
+block	git -C /tmp commit
+allow	git -C /tmp log
+allow	git -C /tmp/repo worktree list
+allow	git -C /tmp/repo branch -a
+allow	git -C /tmp/repo branch -l
+allow	git -C /tmp/repo branch -v
+allow	git -C /tmp/repo branch -r
+allow	git -C /tmp/repo branch --list
+allow	git -C /tmp/repo remote -v
+allow	git -C /tmp/repo remote --verbose
+allow	git -C /tmp/repo remote show
+allow	git -C /tmp/repo config --get user.name
+allow	git -C /tmp/repo config --get-all user.name
+allow	git -C /tmp/repo config --list
+allow	git -C /tmp/repo config -l
+block	git -C /tmp/repo commit
+allow	git -C /tmp/repo log
+allow	git -c user.name=x worktree list
+allow	git -c user.name=x branch -a
+allow	git -c user.name=x branch -l
+allow	git -c user.name=x branch -v
+allow	git -c user.name=x branch -r
+allow	git -c user.name=x branch --list
+allow	git -c user.name=x remote -v
+allow	git -c user.name=x remote --verbose
+allow	git -c user.name=x remote show
+allow	git -c user.name=x config --get user.name
+allow	git -c user.name=x config --get-all user.name
+allow	git -c user.name=x config --list
+allow	git -c user.name=x config -l
+block	git -c user.name=x commit
+allow	git -c user.name=x log
+allow	git -c a.b=c -c d.e=f worktree list
+allow	git -c a.b=c -c d.e=f branch -a
+allow	git -c a.b=c -c d.e=f branch -l
+allow	git -c a.b=c -c d.e=f branch -v
+allow	git -c a.b=c -c d.e=f branch -r
+allow	git -c a.b=c -c d.e=f branch --list
+allow	git -c a.b=c -c d.e=f remote -v
+allow	git -c a.b=c -c d.e=f remote --verbose
+allow	git -c a.b=c -c d.e=f remote show
+allow	git -c a.b=c -c d.e=f config --get user.name
+allow	git -c a.b=c -c d.e=f config --get-all user.name
+allow	git -c a.b=c -c d.e=f config --list
+allow	git -c a.b=c -c d.e=f config -l
+block	git -c a.b=c -c d.e=f commit
+allow	git -c a.b=c -c d.e=f log
+allow	git --git-dir=/tmp/.git worktree list
+allow	git --git-dir=/tmp/.git branch -a
+allow	git --git-dir=/tmp/.git branch -l
+allow	git --git-dir=/tmp/.git branch -v
+allow	git --git-dir=/tmp/.git branch -r
+allow	git --git-dir=/tmp/.git branch --list
+allow	git --git-dir=/tmp/.git remote -v
+allow	git --git-dir=/tmp/.git remote --verbose
+allow	git --git-dir=/tmp/.git remote show
+allow	git --git-dir=/tmp/.git config --get user.name
+allow	git --git-dir=/tmp/.git config --get-all user.name
+allow	git --git-dir=/tmp/.git config --list
+allow	git --git-dir=/tmp/.git config -l
+block	git --git-dir=/tmp/.git commit
+allow	git --git-dir=/tmp/.git log
+allow	git --work-tree=/tmp worktree list
+allow	git --work-tree=/tmp branch -a
+allow	git --work-tree=/tmp branch -l
+allow	git --work-tree=/tmp branch -v
+allow	git --work-tree=/tmp branch -r
+allow	git --work-tree=/tmp branch --list
+allow	git --work-tree=/tmp remote -v
+allow	git --work-tree=/tmp remote --verbose
+allow	git --work-tree=/tmp remote show
+allow	git --work-tree=/tmp config --get user.name
+allow	git --work-tree=/tmp config --get-all user.name
+allow	git --work-tree=/tmp config --list
+allow	git --work-tree=/tmp config -l
+block	git --work-tree=/tmp commit
+allow	git --work-tree=/tmp log
+allow	git --no-pager worktree list
+allow	git --no-pager branch -a
+allow	git --no-pager branch -l
+allow	git --no-pager branch -v
+allow	git --no-pager branch -r
+allow	git --no-pager branch --list
+allow	git --no-pager remote -v
+allow	git --no-pager remote --verbose
+allow	git --no-pager remote show
+allow	git --no-pager config --get user.name
+allow	git --no-pager config --get-all user.name
+allow	git --no-pager config --list
+allow	git --no-pager config -l
+block	git --no-pager commit
+allow	git --no-pager log
+allow	git -C /tmp -c a.b=c worktree list
+allow	git -C /tmp -c a.b=c branch -a
+allow	git -C /tmp -c a.b=c branch -l
+allow	git -C /tmp -c a.b=c branch -v
+allow	git -C /tmp -c a.b=c branch -r
+allow	git -C /tmp -c a.b=c branch --list
+allow	git -C /tmp -c a.b=c remote -v
+allow	git -C /tmp -c a.b=c remote --verbose
+allow	git -C /tmp -c a.b=c remote show
+allow	git -C /tmp -c a.b=c config --get user.name
+allow	git -C /tmp -c a.b=c config --get-all user.name
+allow	git -C /tmp -c a.b=c config --list
+allow	git -C /tmp -c a.b=c config -l
+block	git -C /tmp -c a.b=c commit
+allow	git -C /tmp -c a.b=c log
+allow	git --git-dir=/tmp/.git -C /tmp worktree list
+allow	git --git-dir=/tmp/.git -C /tmp branch -a
+allow	git --git-dir=/tmp/.git -C /tmp branch -l
+allow	git --git-dir=/tmp/.git -C /tmp branch -v
+allow	git --git-dir=/tmp/.git -C /tmp branch -r
+allow	git --git-dir=/tmp/.git -C /tmp branch --list
+allow	git --git-dir=/tmp/.git -C /tmp remote -v
+allow	git --git-dir=/tmp/.git -C /tmp remote --verbose
+allow	git --git-dir=/tmp/.git -C /tmp remote show
+allow	git --git-dir=/tmp/.git -C /tmp config --get user.name
+allow	git --git-dir=/tmp/.git -C /tmp config --get-all user.name
+allow	git --git-dir=/tmp/.git -C /tmp config --list
+allow	git --git-dir=/tmp/.git -C /tmp config -l
+block	git --git-dir=/tmp/.git -C /tmp commit
+allow	git --git-dir=/tmp/.git -C /tmp log
+block	sudo git commit
+block	sudo git -C /tmp commit
+allow	sudo git worktree list
+allow	sudo git -C /tmp worktree list
+allow	sudo git log
+allow	sudo git -C /tmp log
+allow	sudo git branch -a
+allow	sudo git -C /tmp branch -a
+allow	sudo git remote -v
+allow	sudo git -C /tmp remote -v
+allow	sudo git config --get user.name
+allow	sudo git -C /tmp config --get user.name
+block	env FOO=1 git commit
+block	env FOO=1 git -C /tmp commit
+allow	env FOO=1 git worktree list
+allow	env FOO=1 git -C /tmp worktree list
+allow	env FOO=1 git log
+allow	env FOO=1 git -C /tmp log
+allow	env FOO=1 git branch -a
+allow	env FOO=1 git -C /tmp branch -a
+allow	env FOO=1 git remote -v
+allow	env FOO=1 git -C /tmp remote -v
+allow	env FOO=1 git config --get user.name
+allow	env FOO=1 git -C /tmp config --get user.name
+block	env FOO=1 BAR=2 git commit
+block	env FOO=1 BAR=2 git -C /tmp commit
+allow	env FOO=1 BAR=2 git worktree list
+allow	env FOO=1 BAR=2 git -C /tmp worktree list
+allow	env FOO=1 BAR=2 git log
+allow	env FOO=1 BAR=2 git -C /tmp log
+allow	env FOO=1 BAR=2 git branch -a
+allow	env FOO=1 BAR=2 git -C /tmp branch -a
+allow	env FOO=1 BAR=2 git remote -v
+allow	env FOO=1 BAR=2 git -C /tmp remote -v
+allow	env FOO=1 BAR=2 git config --get user.name
+allow	env FOO=1 BAR=2 git -C /tmp config --get user.name
+block	cd /tmp && git commit
+block	cd /tmp && git -C /tmp commit
+allow	cd /tmp && git worktree list
+allow	cd /tmp && git -C /tmp worktree list
+allow	cd /tmp && git log
+allow	cd /tmp && git -C /tmp log
+allow	cd /tmp && git branch -a
+allow	cd /tmp && git -C /tmp branch -a
+allow	cd /tmp && git remote -v
+allow	cd /tmp && git -C /tmp remote -v
+allow	cd /tmp && git config --get user.name
+allow	cd /tmp && git -C /tmp config --get user.name
+block	true; git commit
+block	true; git -C /tmp commit
+allow	true; git worktree list
+allow	true; git -C /tmp worktree list
+allow	true; git log
+allow	true; git -C /tmp log
+allow	true; git branch -a
+allow	true; git -C /tmp branch -a
+allow	true; git remote -v
+allow	true; git -C /tmp remote -v
+allow	true; git config --get user.name
+allow	true; git -C /tmp config --get user.name
+block	ls | git commit
+block	ls | git -C /tmp commit
+allow	ls | git worktree list
+allow	ls | git -C /tmp worktree list
+allow	ls | git log
+allow	ls | git -C /tmp log
+allow	ls | git branch -a
+allow	ls | git -C /tmp branch -a
+allow	ls | git remote -v
+allow	ls | git -C /tmp remote -v
+allow	ls | git config --get user.name
+allow	ls | git -C /tmp config --get user.name
+block	( git commit
+block	( git -C /tmp commit
+allow	( git worktree list
+allow	( git -C /tmp worktree list
+allow	( git log
+allow	( git -C /tmp log
+allow	( git branch -a
+allow	( git -C /tmp branch -a
+allow	( git remote -v
+allow	( git -C /tmp remote -v
+allow	( git config --get user.name
+allow	( git -C /tmp config --get user.name
+allow	if true; then git commit
+allow	if true; then git -C /tmp commit
+allow	if true; then git worktree list
+allow	if true; then git -C /tmp worktree list
+allow	if true; then git log
+allow	if true; then git -C /tmp log
+allow	if true; then git branch -a
+allow	if true; then git -C /tmp branch -a
+allow	if true; then git remote -v
+allow	if true; then git -C /tmp remote -v
+allow	if true; then git config --get user.name
+allow	if true; then git -C /tmp config --get user.name
+block	GIT commit
+block	sudo GIT -C /tmp commit
+allow	GIT worktree list
+allow	sudo GIT -C /tmp worktree list
+allow	GIT log
+allow	sudo GIT -C /tmp log
+allow	GIT branch -a
+allow	sudo GIT -C /tmp branch -a
+allow	GIT remote -v
+allow	sudo GIT -C /tmp remote -v
+allow	GIT config --get user.name
+allow	sudo GIT -C /tmp config --get user.name
+block	Git commit
+block	sudo Git -C /tmp commit
+allow	Git worktree list
+allow	sudo Git -C /tmp worktree list
+allow	Git log
+allow	sudo Git -C /tmp log
+allow	Git branch -a
+allow	sudo Git -C /tmp branch -a
+allow	Git remote -v
+allow	sudo Git -C /tmp remote -v
+allow	Git config --get user.name
+allow	sudo Git -C /tmp config --get user.name
+block	gIt commit
+block	sudo gIt -C /tmp commit
+allow	gIt worktree list
+allow	sudo gIt -C /tmp worktree list
+allow	gIt log
+allow	sudo gIt -C /tmp log
+allow	gIt branch -a
+allow	sudo gIt -C /tmp branch -a
+allow	gIt remote -v
+allow	sudo gIt -C /tmp remote -v
+allow	gIt config --get user.name
+allow	sudo gIt -C /tmp config --get user.name
+block	git worktree list && git commit -am x
+block	git worktree list; git commit
+block	git worktree list | grep x && git commit
+block	git worktree list && git push -am x
+block	git worktree list; git push
+block	git worktree list | grep x && git push
+block	git worktree list && git reset -am x
+block	git worktree list; git reset
+block	git worktree list | grep x && git reset
+block	git worktree list && git add -am x
+block	git worktree list; git add
+block	git worktree list | grep x && git add
+block	git worktree list && git checkout -am x
+block	git worktree list; git checkout
+block	git worktree list | grep x && git checkout
+block	git worktree list && git tag -am x
+block	git worktree list; git tag
+block	git worktree list | grep x && git tag
+block	git branch -a && git commit -am x
+block	git branch -a; git commit
+block	git branch -a | grep x && git commit
+block	git branch -a && git push -am x
+block	git branch -a; git push
+block	git branch -a | grep x && git push
+block	git branch -a && git reset -am x
+block	git branch -a; git reset
+block	git branch -a | grep x && git reset
+block	git branch -a && git add -am x
+block	git branch -a; git add
+block	git branch -a | grep x && git add
+block	git branch -a && git checkout -am x
+block	git branch -a; git checkout
+block	git branch -a | grep x && git checkout
+block	git branch -a && git tag -am x
+block	git branch -a; git tag
+block	git branch -a | grep x && git tag
+block	git branch -l && git commit -am x
+block	git branch -l; git commit
+block	git branch -l | grep x && git commit
+block	git branch -l && git push -am x
+block	git branch -l; git push
+block	git branch -l | grep x && git push
+block	git branch -l && git reset -am x
+block	git branch -l; git reset
+block	git branch -l | grep x && git reset
+block	git branch -l && git add -am x
+block	git branch -l; git add
+block	git branch -l | grep x && git add
+block	git branch -l && git checkout -am x
+block	git branch -l; git checkout
+block	git branch -l | grep x && git checkout
+block	git branch -l && git tag -am x
+block	git branch -l; git tag
+block	git branch -l | grep x && git tag
+block	git branch -v && git commit -am x
+block	git branch -v; git commit
+block	git branch -v | grep x && git commit
+block	git branch -v && git push -am x
+block	git branch -v; git push
+block	git branch -v | grep x && git push
+block	git branch -v && git reset -am x
+block	git branch -v; git reset
+block	git branch -v | grep x && git reset
+block	git branch -v && git add -am x
+block	git branch -v; git add
+block	git branch -v | grep x && git add
+block	git branch -v && git checkout -am x
+block	git branch -v; git checkout
+block	git branch -v | grep x && git checkout
+block	git branch -v && git tag -am x
+block	git branch -v; git tag
+block	git branch -v | grep x && git tag
+block	git branch -r && git commit -am x
+block	git branch -r; git commit
+block	git branch -r | grep x && git commit
+block	git branch -r && git push -am x
+block	git branch -r; git push
+block	git branch -r | grep x && git push
+block	git branch -r && git reset -am x
+block	git branch -r; git reset
+block	git branch -r | grep x && git reset
+block	git branch -r && git add -am x
+block	git branch -r; git add
+block	git branch -r | grep x && git add
+block	git branch -r && git checkout -am x
+block	git branch -r; git checkout
+block	git branch -r | grep x && git checkout
+block	git branch -r && git tag -am x
+block	git branch -r; git tag
+block	git branch -r | grep x && git tag
+block	git branch --list && git commit -am x
+block	git branch --list; git commit
+block	git branch --list | grep x && git commit
+block	git branch --list && git push -am x
+block	git branch --list; git push
+block	git branch --list | grep x && git push
+block	git branch --list && git reset -am x
+block	git branch --list; git reset
+block	git branch --list | grep x && git reset
+block	git branch --list && git add -am x
+block	git branch --list; git add
+block	git branch --list | grep x && git add
+block	git branch --list && git checkout -am x
+block	git branch --list; git checkout
+block	git branch --list | grep x && git checkout
+block	git branch --list && git tag -am x
+block	git branch --list; git tag
+block	git branch --list | grep x && git tag
+block	git remote -v && git commit -am x
+block	git remote -v; git commit
+block	git remote -v | grep x && git commit
+block	git remote -v && git push -am x
+block	git remote -v; git push
+block	git remote -v | grep x && git push
+block	git remote -v && git reset -am x
+block	git remote -v; git reset
+block	git remote -v | grep x && git reset
+block	git remote -v && git add -am x
+block	git remote -v; git add
+block	git remote -v | grep x && git add
+block	git remote -v && git checkout -am x
+block	git remote -v; git checkout
+block	git remote -v | grep x && git checkout
+block	git remote -v && git tag -am x
+block	git remote -v; git tag
+block	git remote -v | grep x && git tag
+block	git remote --verbose && git commit -am x
+block	git remote --verbose; git commit
+block	git remote --verbose | grep x && git commit
+block	git remote --verbose && git push -am x
+block	git remote --verbose; git push
+block	git remote --verbose | grep x && git push
+block	git remote --verbose && git reset -am x
+block	git remote --verbose; git reset
+block	git remote --verbose | grep x && git reset
+block	git remote --verbose && git add -am x
+block	git remote --verbose; git add
+block	git remote --verbose | grep x && git add
+block	git remote --verbose && git checkout -am x
+block	git remote --verbose; git checkout
+block	git remote --verbose | grep x && git checkout
+block	git remote --verbose && git tag -am x
+block	git remote --verbose; git tag
+block	git remote --verbose | grep x && git tag
+block	git remote show && git commit -am x
+block	git remote show; git commit
+block	git remote show | grep x && git commit
+block	git remote show && git push -am x
+block	git remote show; git push
+block	git remote show | grep x && git push
+block	git remote show && git reset -am x
+block	git remote show; git reset
+block	git remote show | grep x && git reset
+block	git remote show && git add -am x
+block	git remote show; git add
+block	git remote show | grep x && git add
+block	git remote show && git checkout -am x
+block	git remote show; git checkout
+block	git remote show | grep x && git checkout
+block	git remote show && git tag -am x
+block	git remote show; git tag
+block	git remote show | grep x && git tag
+block	git config --get user.name && git commit -am x
+block	git config --get user.name; git commit
+block	git config --get user.name | grep x && git commit
+block	git config --get user.name && git push -am x
+block	git config --get user.name; git push
+block	git config --get user.name | grep x && git push
+block	git config --get user.name && git reset -am x
+block	git config --get user.name; git reset
+block	git config --get user.name | grep x && git reset
+block	git config --get user.name && git add -am x
+block	git config --get user.name; git add
+block	git config --get user.name | grep x && git add
+block	git config --get user.name && git checkout -am x
+block	git config --get user.name; git checkout
+block	git config --get user.name | grep x && git checkout
+block	git config --get user.name && git tag -am x
+block	git config --get user.name; git tag
+block	git config --get user.name | grep x && git tag
+block	git config --get-all user.name && git commit -am x
+block	git config --get-all user.name; git commit
+block	git config --get-all user.name | grep x && git commit
+block	git config --get-all user.name && git push -am x
+block	git config --get-all user.name; git push
+block	git config --get-all user.name | grep x && git push
+block	git config --get-all user.name && git reset -am x
+block	git config --get-all user.name; git reset
+block	git config --get-all user.name | grep x && git reset
+block	git config --get-all user.name && git add -am x
+block	git config --get-all user.name; git add
+block	git config --get-all user.name | grep x && git add
+block	git config --get-all user.name && git checkout -am x
+block	git config --get-all user.name; git checkout
+block	git config --get-all user.name | grep x && git checkout
+block	git config --get-all user.name && git tag -am x
+block	git config --get-all user.name; git tag
+block	git config --get-all user.name | grep x && git tag
+block	git config --list && git commit -am x
+block	git config --list; git commit
+block	git config --list | grep x && git commit
+block	git config --list && git push -am x
+block	git config --list; git push
+block	git config --list | grep x && git push
+block	git config --list && git reset -am x
+block	git config --list; git reset
+block	git config --list | grep x && git reset
+block	git config --list && git add -am x
+block	git config --list; git add
+block	git config --list | grep x && git add
+block	git config --list && git checkout -am x
+block	git config --list; git checkout
+block	git config --list | grep x && git checkout
+block	git config --list && git tag -am x
+block	git config --list; git tag
+block	git config --list | grep x && git tag
+block	git config -l && git commit -am x
+block	git config -l; git commit
+block	git config -l | grep x && git commit
+block	git config -l && git push -am x
+block	git config -l; git push
+block	git config -l | grep x && git push
+block	git config -l && git reset -am x
+block	git config -l; git reset
+block	git config -l | grep x && git reset
+block	git config -l && git add -am x
+block	git config -l; git add
+block	git config -l | grep x && git add
+block	git config -l && git checkout -am x
+block	git config -l; git checkout
+block	git config -l | grep x && git checkout
+block	git config -l && git tag -am x
+block	git config -l; git tag
+block	git config -l | grep x && git tag
+allow	echo commit
+allow	cat gitconfig
+allow	grep -r 'git push' docs/
+allow	python3 -c 'print("git commit")'
+allow	./scripts/gitless.sh
+allow	digit-tag
+allow	legitimate
+allow	git-crypt unlock
+allow	gitk
+allow	npm run git:status
+allow	make git-hooks
+allow	echo 'git add' > note.txt
+allow	gh pr list
+allow	gh pr view 1
+allow	gh api /repos/x/y
+allow	gh api -X GET /x
+allow	gh repo view
+allow	gh workflow list
+allow	gh run list
+allow	gitgit commit
+allow	notgit commit
+allow	legit commit
+block	gh pr create
+block	gh pr merge 1
+block	gh pr close 1
+block	gh pr edit 1
+block	gh pr ready 1
+block	gh pr review 1
+block	gh repo create x
+block	gh repo delete x
+block	gh repo edit
+block	gh repo fork
+block	gh repo sync
+block	gh release create v1
+block	gh release upload
+block	gh workflow run ci.yml
+block	gh api -X POST /x
+block	gh api -XPOST /x
+block	gh api -X PATCH /x
+block	gh api -X PUT /x
+block	gh api -X DELETE /x
+allow	sudo gh pr create
+block	( gh pr merge 1 )
+block	true; gh release create v2
+block	git   commit   -am x
+block	git\tcommit -am x
+block	  git commit
+allow	git -C '/tmp/with space' commit
+block	git -C "/tmp/x" commit
+block	git commit -m 'git worktree list'
+block	git worktree add ../wt
+block	git worktree remove ../wt
+block	git worktree prune
+block	git branch new-branch
+block	git branch -d old
+block	git remote add origin x
+block	git remote set-url origin x
+block	git config user.name x
+block	git config --global user.name x
+allow	
+allow	 
+allow	\t
+allow	git
+allow	git 
