@@ -100,6 +100,11 @@ func main() {
 	}
 	// Otherwise the first argument selects the tool: `outsource runs list`.
 	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "help", "-h", "--help":
+			fmt.Printf("usage: outsource <%s> [args...]\n", names())
+			os.Exit(0)
+		}
 		if t := toolFor(os.Args[1]); t != nil {
 			run(t, os.Args[2:])
 		}

@@ -135,6 +135,9 @@ func OutsourceMain(args []string, stdout, stderr io.Writer) int {
 			o.allowAgent, ok = true, true
 		case "--no-vision-check":
 			o.noVisionCheck, ok = true, true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "usage: outsource-run --cwd <dir> --spec <file> --log <file> [--session S] [--model M] [--harness claude-code|crush] [--provider P] [--config-dir D] [--label L] [--done-marker M] [--require-quota N] [--max-seconds N] [--allow-agent] [--no-vision-check]")
+			return 0
 		default:
 			fmt.Fprintf(stderr, "unknown flag: %s\n", args[i])
 			return ExitUsage

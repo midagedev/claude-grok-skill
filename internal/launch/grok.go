@@ -103,6 +103,9 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 			o.research, ok = true, true
 		case "--detach":
 			o.detach, ok = true, true
+		case "-h", "--help":
+			fmt.Fprintln(stdout, "usage: grok-run --cwd <dir> --spec <file> --log <file.ndjson> [--label L] [--done-marker M] [--git-profile strict|readonly-plus|trusted] [--resume SID] [--model M] [--reasoning-effort E] [--max-turns N] [--research] [--detach] [-- <grok flags...>]")
+			return 0
 		case "--":
 			o.extra = append(o.extra, args[i+1:]...)
 			i = len(args)
