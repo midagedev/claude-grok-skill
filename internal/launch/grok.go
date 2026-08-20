@@ -209,6 +209,14 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 
 	promptFile := o.spec
 	if o.research {
+		// Say it at launch, not only inside the spec. researchNotice tells the
+		// model; nothing told the lead. Measured 2026-08-21: three rounds were
+		// launched with --research under specs that named a report file, all
+		// three correctly reported in-message, and the lead went looking for
+		// files that could never exist. The flag combination is legitimate
+		// (a research round with no file deliverable is the normal case), so
+		// this is a notice rather than the usage error --json-schema gets.
+		fmt.Fprintln(stderr, "grok-run: research mode — no write tools; the round's only deliverable channel is its final message. If your spec asks for a report FILE, drop --research or drop the file.")
 		gitFlags = append(gitFlags, "--deny", "Write", "--deny", "Edit",
 			"--disallowed-tools", "write,search_replace")
 		f, err := os.CreateTemp(os.TempDir(), "grok-spec.")
