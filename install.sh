@@ -11,7 +11,8 @@
 # writes a checksum manifest (.install-checksums), and the next run refuses
 # only when files changed since the LAST INSTALL (i.e. someone hand-edited
 # the installed copy). references/local-overlay.md is always preserved and
-# never checksummed.
+# never checksummed; when the install has none, an untracked
+# local-overlay*.md at the repo root seeds it.
 set -eu
 
 SRC="$(cd "$(dirname "$0")" && pwd)/skills/outsource"
@@ -70,6 +71,21 @@ if [ -n "$TMP_OVERLAY" ]; then
   cp "$TMP_OVERLAY" "$OVERLAY"
   rm -f "$TMP_OVERLAY"
   echo "preserved local overlay: $OVERLAY"
+fi
+
+# Seed the overlay from a personal source kept untracked at the repo root
+# (`local-overlay*.md`). The repo never ships references/local-overlay.md,
+# but a source file sitting here declares itself as exactly that — without
+# this step it silently never reaches the install. A preserved overlay from
+# the previous install wins over the seed.
+if [ ! -f "$OVERLAY" ]; then
+  for seed in "$(cd "$(dirname "$0")" && pwd)"/local-overlay*.md; do
+    [ -f "$seed" ] || continue
+    mkdir -p "$DEST/references"
+    cp "$seed" "$OVERLAY"
+    echo "seeded local overlay from: $seed"
+    break
+  done
 fi
 
 # Record what this install shipped, so the next run can tell "upgrade over
