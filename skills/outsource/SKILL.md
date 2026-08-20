@@ -58,10 +58,21 @@ Selection rules:
 ```bash
 cat <skill-dir>/references/spec-preamble.md \      # shared rules — every clause from a real incident
     <skill-dir>/references/glm-preamble.md \       # GLM runs only: the runtime delta
-    <skill-dir>/references/local-overlay.md \      # user overlay, if it exists
+    <skill-dir>/references/local-overlay.md \      # user overlay — if it exists AND applies to this repo
     <repo>/.outsource/overlay.md \                 # project overlay, if it exists
     <scratch>/task.md > <scratch>/spec.md
 ```
+
+**Keep the overlay repo-agnostic, and include only the part that applies.**
+An overlay section written for one project reaches a spec for a different
+one as wrong premises — repo-specific gates, capture tools and domain
+contracts belong in that repo's own `CLAUDE.md`/`AGENTS.md`, which the
+delegate loads on its own. There is a second cost measured on the way in:
+`spec-lint` resolves every path in the *assembled* file, so a path from
+another project fails the lint on something the task never claimed, and a
+linter that always exits 1 is a linter you stop reading. Either keep
+project blocks out of the overlay, or trim them for the target repo before
+assembling.
 
 **Which preamble.** `spec-preamble-core.md` is a short substitute for
 `spec-preamble.md`. Measured (GLM-5.3 on the claude-code harness, 5 issues,
