@@ -49,14 +49,17 @@ Selection rules:
   pin the model explicitly, because z.ai maps an unqualified `claude-*`
   request onto its plan default (measured: glm-4.7).
 - Site-local defaults (which backend is *your* default, model overrides)
-  belong in `references/local-overlay.md`, not here.
+  belong in the user overlay (`references/local-overlay.md`); repo-specific
+  gates and coordinates in the project overlay (`<repo>/.outsource/overlay.md`).
+  See *Local overlays* below.
 
 ## Spec assembly (every delegation)
 
 ```bash
 cat <skill-dir>/references/spec-preamble.md \      # shared rules — every clause from a real incident
     <skill-dir>/references/glm-preamble.md \       # GLM runs only: the runtime delta
-    <skill-dir>/references/local-overlay.md \      # if it exists
+    <skill-dir>/references/local-overlay.md \      # user overlay, if it exists
+    <repo>/.outsource/overlay.md \                 # project overlay, if it exists
     <scratch>/task.md > <scratch>/spec.md
 ```
 
@@ -246,11 +249,20 @@ patterns or large volumes.
   stay with Claude — write with Claude, have a backend review.
 - Vision work on GLM-5.3, ever.
 
-## Local overlay (project/user-specific context)
+## Local overlays (user-level and project-level)
 
-If `references/local-overlay.md` exists next to this skill, read it and
-apply it on top of these instructions — role tables, house gate recipes,
-default-backend and model-assignment tables, scratch-path conventions.
-Include it between the shared preamble and the task spec when assembling.
-The installer preserves an existing overlay on upgrade; this repository
-never ships one.
+Two layers, most specific last so it wins on conflict:
+
+1. **User overlay** — `references/local-overlay.md` next to this skill.
+   Holds only what is true for this user on every repo: default backend,
+   model/effort flags, provider headroom notes. The installer preserves it
+   on upgrade; this repository never ships one.
+2. **Project overlay** — `<repo>/.outsource/overlay.md`, checked into the
+   target repo. Holds what is true only there: base branch and repo
+   coordinates, house gate recipes, incident history, files-to-read lists.
+   A repo-specific fact in the user overlay is a bug — move it here, where
+   it versions with the code it describes.
+
+Read both when they exist and apply them on top of these instructions.
+Include both in spec assembly, user overlay first, project overlay second,
+between the shared preamble and the task spec.

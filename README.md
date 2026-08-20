@@ -369,9 +369,14 @@ What closed the measured quality gap, each device with an effect behind it:
 5. **Logic design principles** — derive-don't-store · re-normalize on load · 3-class input defense
 6. **Evidence rules** — verify from a cold start and compare test counts with CI; every number carries the command that produced it; the recurrence layer lands as a file, not a sentence
 
-## Local overlay
+## Local overlays
 
-Project- or user-specific context (role tables, default-backend choice, house gate recipes) goes in `references/local-overlay.md` next to the installed skill — applied automatically, preserved by `install.sh` across upgrades, never shipped by this repo.
+Two layers, most specific last:
+
+- **User overlay** — `references/local-overlay.md` next to the installed skill. Only what is true for you on every repo (default backend, model flags). Preserved by `install.sh` across upgrades, never shipped by this repo.
+- **Project overlay** — `<repo>/.outsource/overlay.md`, checked into the target repo. Base branch, house gate recipes, incident history — the facts that version with the code they describe.
+
+Both are applied automatically and included in spec assembly, user first, project second.
 
 ## Known limits
 
