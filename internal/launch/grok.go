@@ -339,10 +339,11 @@ func GrokMain(args []string, stdout, stderr io.Writer) int {
 	verdict := "absent"
 	if o.marker != "" {
 		if f, err := os.Open(o.log); err == nil {
-			// The marker is looked for in the round's FINAL REPORT, not anywhere in
-			// the stream: a marker quoted early in planning must not count as
-			// completion.
-			if rep, ok := report.Extract(f); ok && strings.Contains(rep, o.marker) {
+			// The marker is looked for on the LAST LINE of the round's FINAL
+			// REPORT, not anywhere in the stream or mid-sentence: a marker
+			// quoted in planning or in a "will end with `DONE-X`" promise must
+			// not count as completion (field false-positive 2026-08-22).
+			if rep, ok := report.Extract(f); ok && report.EndsWithMarker(rep, o.marker) {
 				verdict = "found"
 			}
 			f.Close()

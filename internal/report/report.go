@@ -133,6 +133,32 @@ func Extract(r io.Reader) (string, bool) {
 	return strings.TrimSpace(out), true
 }
 
+// EndsWithMarker reports whether the report's LAST non-empty line is the
+// completion marker. Contains() over the whole report was the field defect
+// (2026-08-22, GDK-616 round): a final message saying "…the report will end
+// with `DONE-X`" quoted the marker mid-sentence and was scored found while
+// the round's gates were still running. The spec contract has always been
+// "the last line is exactly the marker", so the verdict now reads exactly
+// that line. Markdown decoration a model might wrap the token in (backticks,
+// bold asterisks) is stripped; anything more — a marker inside a sentence,
+// punctuation glued on — scores absent, which is the safe direction: absent
+// sends the lead to the tree, found ends the audit.
+func EndsWithMarker(rep, marker string) bool {
+	if marker == "" {
+		return false
+	}
+	lines := strings.Split(rep, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		line = strings.Trim(line, "`*")
+		return line == marker
+	}
+	return false
+}
+
 // Main is the last-report entry point.
 func Main(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] == "" {

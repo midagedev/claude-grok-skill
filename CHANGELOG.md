@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.5 — 2026-08-22 — the marker is the report's last line, not a substring
+
+- **`done_marker=found` now means the final report's last non-empty line IS
+  the marker** (markdown backticks/bold stripped), on both launchers.
+  Measured false-positive (gadak GDK-616 round): the delegate's final
+  message was a promise — "…the report's last line will be \`DONE-GDK616\`"
+  — and the report-scope `Contains()` scored it found while the round's
+  Playwright gate was still running; the lead read a delivered round where
+  there was none. The spec contract was always "the last line is exactly
+  the marker"; the verdict now reads exactly that line
+  (`report.EndsWithMarker`, pinned by unit test). A marker glued to
+  punctuation or quoted mid-sentence scores absent — the safe direction:
+  absent sends the lead to the tree, found ends the audit. The crush
+  whole-log grep keeps its own `done_marker_scope=log` and is unchanged.
+
 ## 0.10.4 — 2026-08-18 — `--done-marker` and `--json-schema` cannot both be satisfied
 
 - **`grok-run.sh` refuses `--done-marker` together with `--json-schema`

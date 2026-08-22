@@ -367,7 +367,10 @@ func (r *round) markerVerdict() (verdict, scope string) {
 		defer f.Close()
 		if fi, err := f.Stat(); err == nil && fi.Size() > 0 {
 			if rep, ok := report.Extract(f); ok {
-				if strings.Contains(rep, r.o.doneMarker) {
+				// Last-line identity, not Contains: a report that merely QUOTES
+				// the marker ("…will end with `DONE-X`") is a promise, not a
+				// completion (field false-positive 2026-08-22).
+				if report.EndsWithMarker(rep, r.o.doneMarker) {
 					return "found", "report"
 				}
 				return "absent", "report"
